@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { fmt, fromCents, previewSplit, toCents } from '../money'
+import ParticipantPickerSheet, { rememberRecentParticipant } from '../components/ParticipantPickerSheet'
 
 // The heart of the POS. Flow: pick participant (or anonymous) -> tap products into
 // the cart -> "Zur Kasse" -> review basket + choose how it's paid -> confirm.
@@ -9,6 +10,7 @@ export default function SellerPanel() {
   const [participant, setParticipant] = useState(null) // null = anonymous cash sale
   const [cart, setCart] = useState({}) // productId -> quantity
   const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false) // the full-screen participant picker
   const [lastSale, setLastSale] = useState(null) // success screen data
   const [categoryFilter, setCategoryFilter] = useState(null) // null = all categories
   const [error, setError] = useState(null)
@@ -62,6 +64,7 @@ export default function SellerPanel() {
   }
 
   function handleSold(sale) {
+    if (participant) rememberRecentParticipant(participant.id) // feeds the "Zuletzt" row
     setLastSale(sale)
     setCart({})
     setCheckoutOpen(false)
@@ -78,7 +81,7 @@ export default function SellerPanel() {
     <div className="space-y-4">
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
-      <ParticipantPicker participant={participant} onSelect={setParticipant} />
+      <ParticipantBar participant={participant} onOpenPicker={() => setPickerOpen(true)} onClear={() => setParticipant(null)} />
 
       <CategoryTabs products={products} active={categoryFilter} onChange={setCategoryFilter} />
 
@@ -104,75 +107,54 @@ export default function SellerPanel() {
           totalCents={totalCents}
           participant={participant}
           onChangeQty={changeQty}
+          onPickParticipant={() => setPickerOpen(true)} // choose/change the person from INSIDE the Kasse
           onClose={() => setCheckoutOpen(false)}
           onSold={handleSold}
+        />
+      )}
+
+      {/* z-40: the picker opens ABOVE the checkout sheet when called from there */}
+      {pickerOpen && (
+        <ParticipantPickerSheet
+          onSelect={(p) => {
+            setParticipant(p)
+            setPickerOpen(false)
+          }}
+          onClose={() => setPickerOpen(false)}
         />
       )}
     </div>
   )
 }
 
-// ---------------------------------------------------------------- participant search
-function ParticipantPicker({ participant, onSelect }) {
-  const [search, setSearch] = useState('')
-  const [results, setResults] = useState([])
-
-  // fetch matches while typing, with a 250ms pause so we don't fire a request per keystroke
-  useEffect(() => {
-    if (search.trim().length < 2) {
-      setResults([])
-      return
-    }
-    const timer = setTimeout(() => {
-      api(`/api/participants?search=${encodeURIComponent(search.trim())}`)
-        .then(setResults)
-        .catch(() => setResults([]))
-    }, 250)
-    return () => clearTimeout(timer) // typing again cancels the previous timer
-  }, [search])
-
+// ---------------------------------------------------------------- participant bar
+// Slim bar showing who the sale is for. The actual choosing happens in the
+// full-screen ParticipantPickerSheet (A-Z list / grid / M-W filter / Zuletzt).
+function ParticipantBar({ participant, onOpenPicker, onClear }) {
   if (participant) {
     return (
       <div className="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between">
-        <div>
+        <button onClick={onOpenPicker} className="text-left">
           <div className="font-semibold">
             {participant.firstName} {participant.lastName}
           </div>
           <div className={`text-sm ${participant.inDebt ? 'text-accent' : 'text-primary'}`}>
             Guthaben: {fmt(participant.balance)}
           </div>
-        </div>
-        <button onClick={() => onSelect(null)} className="text-sm text-gray-500 border rounded-lg px-3 py-2">
-          Wechseln
+        </button>
+        <button onClick={onClear} className="text-sm text-gray-500 border rounded-lg px-3 py-2">
+          ✕ Barverkauf
         </button>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-4 space-y-2">
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="🔍 Teilnehmer suchen… (leer = Barverkauf)"
-        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-base"
-      />
-      {results.map((p) => (
-        <button
-          key={p.id}
-          onClick={() => {
-            onSelect(p)
-            setSearch('')
-          }}
-          className="w-full flex justify-between items-center p-3 rounded-lg bg-gray-50 active:bg-gray-200"
-        >
-          <span>
-            {p.firstName} {p.lastName}
-          </span>
-          <span className={p.inDebt ? 'text-accent' : 'text-primary'}>{fmt(p.balance)}</span>
-        </button>
-      ))}
-    </div>
+    <button onClick={onOpenPicker}
+            className="w-full bg-white rounded-xl shadow-sm p-4 flex items-center justify-between text-gray-600">
+      <span>👥 Teilnehmer wählen…</span>
+      <span className="text-sm text-gray-400">ohne = Barverkauf</span>
+    </button>
   )
 }
 
@@ -228,12 +210,18 @@ function ProductGrid({ products, cart, onAdd }) {
 }
 
 // ---------------------------------------------------------------- checkout
-function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onClose, onSold }) {
+function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold }) {
   const [cashInput, setCashInput] = useState('') // what the buyer hands over, as typed
   const [useBalance, setUseBalance] = useState(!!participant) // default: pay from balance if there is an account
   const [keepChange, setKeepChange] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+
+  // the participant can be picked/changed WHILE the Kasse is open - re-sync the defaults
+  useEffect(() => {
+    setUseBalance(!!participant)
+    if (!participant) setKeepChange(false) // no account -> nothing to credit
+  }, [participant?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const cashCents = toCents(cashInput === '' ? 0 : cashInput.replace(',', '.'))
   const balanceCents = participant ? toCents(participant.balance) : 0
@@ -281,11 +269,16 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onCl
           </button>
         </div>
 
-        <div className="text-sm text-gray-600">
-          {participant
-            ? `Verkauf an ${participant.firstName} ${participant.lastName} · Guthaben ${fmt(participant.balance)}`
-            : 'Barverkauf (ohne Teilnehmer)'}
-        </div>
+        {/* who is buying - tappable, so the person can be assigned as the LAST step too */}
+        <button onClick={onPickParticipant}
+                className="w-full bg-gray-50 rounded-xl p-3 flex items-center justify-between text-left">
+          <span className="text-sm text-gray-700">
+            {participant
+              ? <>Verkauf an <span className="font-semibold">{participant.firstName} {participant.lastName}</span> · Guthaben {fmt(participant.balance)}</>
+              : 'Barverkauf (ohne Teilnehmer)'}
+          </span>
+          <span className="text-sm text-primary font-semibold">{participant ? 'Ändern' : 'Teilnehmer wählen'}</span>
+        </button>
 
         {/* basket lines with +/- : the "final check with overview" from the requirements */}
         <div className="bg-gray-50 rounded-xl divide-y">

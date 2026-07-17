@@ -47,6 +47,7 @@ public class ParticipantService {
         p.setFirstName(request.firstName().trim());
         p.setLastName(request.lastName().trim());
         p.setPhone(request.phone());
+        p.setGender(request.gender());
         p.setCamp(camp);
         p = participantRepository.save(p);
 

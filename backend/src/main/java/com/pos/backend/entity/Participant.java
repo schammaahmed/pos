@@ -26,6 +26,12 @@ public class Participant {
 
     private String phone; // optional - for future SMS notifications / pre-orders
 
+    public enum Gender { M, W }
+
+    // optional - used by the seller panel to filter the participant picker (M/W tabs)
+    @Enumerated(EnumType.STRING)
+    private Gender gender;
+
     // ONE field for both balance and debt: positive = credit, negative = owes money.
     // BigDecimal, never double/float - floating point math loses cents (0.1 + 0.2 != 0.3).
     // precision 10, scale 2 = up to 99,999,999.99 with exactly 2 decimal places.
