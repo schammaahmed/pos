@@ -68,6 +68,8 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setRole(request.role());
         user.setCamp(camp);
+        // the admin only sets a TEMPORARY password - the user must replace it at first login
+        user.setMustChangePassword(true);
         return UserResponse.from(userRepository.save(user));
     }
 

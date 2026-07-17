@@ -31,6 +31,7 @@ public class DataSeeder implements CommandLineRunner {
         admin.setEmail("admin@pos.local");
         admin.setPassword(passwordEncoder.encode("admin123")); // stored as BCrypt hash, never plain text
         admin.setRole(Role.SUPER_ADMIN);
+        admin.setMustChangePassword(true); // admin123 is public knowledge (it's in this file) - force a real one
         userRepository.save(admin);
 
         log.warn("Seeded default SUPER_ADMIN: admin@pos.local / admin123 - CHANGE THIS PASSWORD!");

@@ -43,6 +43,14 @@ public class User {
     @Column(nullable = false)
     private boolean active = true;
 
+    // true = the password was set by an admin (or the seeder), not by the user themselves.
+    // The frontend blocks everything until the user picks their own password.
+    // columnDefinition with DEFAULT: ddl-auto=update adds this column to the EXISTING users
+    // table - without a default, Postgres refuses a NOT NULL column on non-empty tables.
+    // (Proper migrations/Flyway will replace this trick in a later milestone.)
+    @Column(nullable = false, columnDefinition = "boolean not null default false")
+    private boolean mustChangePassword = false;
+
     @Column(updatable = false)
     private LocalDateTime createdAt;
 

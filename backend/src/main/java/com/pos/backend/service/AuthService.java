@@ -1,5 +1,6 @@
 package com.pos.backend.service;
 
+import com.pos.backend.dto.ChangePasswordRequest;
 import com.pos.backend.dto.LoginRequest;
 import com.pos.backend.dto.LoginResponse;
 import com.pos.backend.entity.User;
@@ -34,7 +35,22 @@ public class AuthService {
         String token = jwtService.generateToken(user.getEmail(), user.getRole().name());
         return new LoginResponse(token, user.getId(), user.getFirstName(), user.getLastName(), user.getRole().name(),
                 user.getCamp() != null ? user.getCamp().getId() : null,
-                user.getCamp() != null ? user.getCamp().getName() : null);
+                user.getCamp() != null ? user.getCamp().getName() : null,
+                user.isMustChangePassword());
+    }
+
+    // The logged-in user replaces their (temporary) password with their own.
+    // Re-checking the current password protects against someone grabbing an unlocked device.
+    public void changePassword(User currentUser, ChangePasswordRequest request) {
+        if (!passwordEncoder.matches(request.currentPassword(), currentUser.getPassword())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Current password is wrong");
+        }
+        if (passwordEncoder.matches(request.newPassword(), currentUser.getPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password must be different from the old one");
+        }
+        currentUser.setPassword(passwordEncoder.encode(request.newPassword()));
+        currentUser.setMustChangePassword(false); // it's their own choice now
+        userRepository.save(currentUser);
     }
 
     private ResponseStatusException badCredentials() {

@@ -21,7 +21,16 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>
+  // patch fields of the stored user (e.g. mustChangePassword: false after changing it)
+  function updateUser(changes) {
+    setUser((current) => {
+      const next = { ...current, ...changes }
+      saveUser(next)
+      return next
+    })
+  }
+
+  return <AuthContext.Provider value={{ user, login, logout, updateUser }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
