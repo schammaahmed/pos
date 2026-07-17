@@ -27,3 +27,4 @@ replay_pid*
 application.properties
 *.csv
 *.xlsx
+*.cmd
