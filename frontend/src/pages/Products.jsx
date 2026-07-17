@@ -76,6 +76,8 @@ export default function Products() {
       {editing && (
         <ProductForm
           product={editing === 'new' ? null : editing}
+          // existing categories, derived from the products we already loaded - no extra endpoint needed
+          categories={[...new Set(products.map((p) => p.category).filter(Boolean))]}
           onClose={() => setEditing(null)}
           onSaved={reload}
         />
@@ -84,10 +86,12 @@ export default function Products() {
   )
 }
 
-function ProductForm({ product, onClose, onSaved }) {
+function ProductForm({ product, categories, onClose, onSaved }) {
   const [name, setName] = useState(product?.name ?? '')
   const [price, setPrice] = useState(product ? String(product.price) : '')
   const [category, setCategory] = useState(product?.category ?? '')
+  // "new category" mode: the chip row is replaced by a free-text input
+  const [newCategoryMode, setNewCategoryMode] = useState(false)
   const [imageUrl, setImageUrl] = useState(product?.imageUrl ?? '')
   const [error, setError] = useState(null)
 
@@ -119,7 +123,43 @@ function ProductForm({ product, onClose, onSaved }) {
         {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-2">{error}</div>}
         <input required placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         <input required placeholder="Preis € (z.B. 1,50)" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
-        <input placeholder="Kategorie (z.B. Getränke)" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
+        {/* category as BUTTONS: tap an existing one, or create a new one manually */}
+        <div className="space-y-2">
+          <span className="text-sm font-medium">Kategorie</span>
+          {newCategoryMode ? (
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                placeholder="Neue Kategorie…"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="flex-1 border rounded-lg px-3 py-3"
+              />
+              <button type="button" onClick={() => { setNewCategoryMode(false); setCategory('') }}
+                      className="border rounded-lg px-3 text-gray-500">✕</button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {categories.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  // tapping the selected chip again deselects it (product without category)
+                  onClick={() => setCategory(category === c ? '' : c)}
+                  className={`rounded-full px-4 py-2 text-sm border ${
+                    category === c ? 'bg-primary text-white border-primary' : 'bg-white border-gray-300'
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+              <button type="button" onClick={() => { setNewCategoryMode(true); setCategory('') }}
+                      className="rounded-full px-4 py-2 text-sm border border-dashed border-gray-400 text-gray-600">
+                + Neue Kategorie
+              </button>
+            </div>
+          )}
+        </div>
         <input placeholder="Bild-URL (optional)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         {imageUrl && <img src={imageUrl} alt="Vorschau" className="w-20 h-20 rounded-lg object-cover" />}
         <div className="flex gap-2">
