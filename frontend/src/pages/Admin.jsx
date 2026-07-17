@@ -53,7 +53,7 @@ export default function Admin() {
         <div className="flex justify-between items-center">
           <h2 className="font-bold text-lg">Camps</h2>
           {isSuper && (
-            <button onClick={() => setShowCampForm(true)} className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">
+            <button onClick={() => setShowCampForm(true)} className="bg-primary text-white rounded-lg px-4 py-2 text-sm font-semibold">
               + Camp
             </button>
           )}
@@ -68,7 +68,7 @@ export default function Admin() {
                 </div>
               </div>
               {isSuper && c.status === 'ACTIVE' && (
-                <button onClick={() => closeCamp(c)} className="text-sm border rounded-lg px-3 py-2 text-red-600">
+                <button onClick={() => closeCamp(c)} className="text-sm border rounded-lg px-3 py-2 text-accent">
                   Abschließen
                 </button>
               )}
@@ -82,7 +82,7 @@ export default function Admin() {
       <section className="space-y-2">
         <div className="flex justify-between items-center">
           <h2 className="font-bold text-lg">Team</h2>
-          <button onClick={() => setShowUserForm(true)} className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">
+          <button onClick={() => setShowUserForm(true)} className="bg-primary text-white rounded-lg px-4 py-2 text-sm font-semibold">
             + Benutzer
           </button>
         </div>
@@ -161,7 +161,7 @@ function CampForm({ onClose, onSaved }) {
         </label>
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
-          <button type="submit" className="flex-1 bg-blue-600 text-white rounded-lg py-3 font-semibold">Anlegen</button>
+          <button type="submit" className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">Anlegen</button>
         </div>
       </form>
     </div>
@@ -228,7 +228,7 @@ function UserForm({ camps, isSuper, onClose, onSaved }) {
         )}
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
-          <button type="submit" className="flex-1 bg-blue-600 text-white rounded-lg py-3 font-semibold">Anlegen</button>
+          <button type="submit" className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">Anlegen</button>
         </div>
       </form>
     </div>

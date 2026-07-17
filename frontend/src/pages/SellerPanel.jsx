@@ -85,7 +85,7 @@ export default function SellerPanel() {
       {itemCount > 0 && (
         <button
           onClick={() => setCheckoutOpen(true)}
-          className="fixed bottom-16 inset-x-4 max-w-3xl mx-auto bg-blue-600 text-white rounded-xl py-4 font-semibold shadow-lg z-20"
+          className="fixed bottom-16 inset-x-4 max-w-3xl mx-auto bg-primary text-white rounded-xl py-4 font-semibold shadow-lg z-20"
         >
           🛒 {itemCount} Artikel · {fmt(fromCents(totalCents))} · Zur Kasse
         </button>
@@ -131,7 +131,7 @@ function ParticipantPicker({ participant, onSelect }) {
           <div className="font-semibold">
             {participant.firstName} {participant.lastName}
           </div>
-          <div className={`text-sm ${participant.inDebt ? 'text-red-600' : 'text-green-700'}`}>
+          <div className={`text-sm ${participant.inDebt ? 'text-accent' : 'text-primary'}`}>
             Guthaben: {fmt(participant.balance)}
           </div>
         </div>
@@ -162,7 +162,7 @@ function ParticipantPicker({ participant, onSelect }) {
           <span>
             {p.firstName} {p.lastName}
           </span>
-          <span className={p.inDebt ? 'text-red-600' : 'text-green-700'}>{fmt(p.balance)}</span>
+          <span className={p.inDebt ? 'text-accent' : 'text-primary'}>{fmt(p.balance)}</span>
         </button>
       ))}
     </div>
@@ -180,14 +180,14 @@ function ProductGrid({ products, cart, onAdd }) {
           className="relative bg-white rounded-xl shadow-sm p-2 flex flex-col items-center active:scale-95 transition-transform"
         >
           {cart[p.id] > 0 && (
-            <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold">
+            <span className="absolute -top-2 -right-2 bg-primary text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold">
               {cart[p.id]}
             </span>
           )}
           {p.imageUrl ? (
             <img src={p.imageUrl} alt={p.name} className="w-full aspect-square object-cover rounded-lg" />
           ) : (
-            <div className="w-full aspect-square rounded-lg bg-gray-100 flex items-center justify-center text-3xl">
+            <div className="w-full aspect-square rounded-lg bg-page flex items-center justify-center text-3xl">
               🛍️
             </div>
           )}
@@ -326,7 +326,7 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onCl
         </div>
 
         {/* live preview of what confirming will do */}
-        <div className="bg-blue-50 rounded-xl p-4 text-sm space-y-1">
+        <div className="bg-primary/10 rounded-xl p-4 text-sm space-y-1">
           {split.paidCash > 0 && <Row label="Bar bezahlt" value={fmt(fromCents(split.paidCash))} />}
           {split.paidFromBalance > 0 && <Row label="Vom Guthaben" value={fmt(fromCents(split.paidFromBalance))} />}
           {split.debt > 0 && <Row label="Auf Schulden" value={fmt(fromCents(split.debt))} red />}
@@ -355,7 +355,7 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onCl
         <button
           onClick={confirm}
           disabled={busy || cartEntries.length === 0 || anonymousUnderpaid}
-          className="w-full max-w-3xl mx-auto block bg-green-600 text-white rounded-xl py-4 font-semibold text-lg disabled:opacity-40"
+          className="w-full max-w-3xl mx-auto block bg-primary text-white rounded-xl py-4 font-semibold text-lg disabled:opacity-40"
         >
           {busy ? 'Wird gebucht…' : `Verkauf bestätigen · ${fmt(fromCents(totalCents))}`}
         </button>
@@ -366,7 +366,7 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onCl
 
 function Row({ label, value, red, bold }) {
   return (
-    <div className={`flex justify-between ${bold ? 'font-bold' : ''} ${red ? 'text-red-600' : ''}`}>
+    <div className={`flex justify-between ${bold ? 'font-bold' : ''} ${red ? 'text-accent' : ''}`}>
       <span>{label}</span>
       <span>{value}</span>
     </div>
@@ -389,12 +389,12 @@ function SuccessView({ sale, onDone }) {
         </div>
       )}
       {sale.newBalance !== null && (
-        <div className={`text-lg ${Number(sale.newBalance) < 0 ? 'text-red-600' : 'text-green-700'}`}>
+        <div className={`text-lg ${Number(sale.newBalance) < 0 ? 'text-accent' : 'text-primary'}`}>
           Neues Guthaben: <span className="font-bold">{fmt(sale.newBalance)}</span>
         </div>
       )}
 
-      <button onClick={onDone} className="w-full bg-blue-600 text-white rounded-xl py-4 font-semibold">
+      <button onClick={onDone} className="w-full bg-primary text-white rounded-xl py-4 font-semibold">
         Weiter verkaufen
       </button>
     </div>

@@ -39,7 +39,7 @@ export default function Participants() {
           className="flex-1 border border-gray-300 rounded-lg px-3 py-3"
         />
         {isLead(user) && (
-          <button onClick={() => setShowCreate(true)} className="bg-blue-600 text-white rounded-lg px-4 font-semibold">
+          <button onClick={() => setShowCreate(true)} className="bg-primary text-white rounded-lg px-4 font-semibold">
             + Neu
           </button>
         )}
@@ -115,7 +115,7 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
         <span className="font-medium">
           {participant.firstName} {participant.lastName}
         </span>
-        <span className={participant.inDebt ? 'text-red-600 font-semibold' : 'text-green-700'}>
+        <span className={participant.inDebt ? 'text-accent font-semibold' : 'text-primary'}>
           {fmt(participant.balance)}
         </span>
       </button>
@@ -125,11 +125,11 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
           {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-2">{error}</div>}
 
           <div className="flex gap-2">
-            <button onClick={deposit} className="flex-1 bg-green-600 text-white rounded-lg py-2 text-sm font-semibold">
+            <button onClick={deposit} className="flex-1 bg-primary text-white rounded-lg py-2 text-sm font-semibold">
               💶 Einzahlen
             </button>
             {canSettle && participant.inDebt && (
-              <button onClick={settleDebt} className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-semibold">
+              <button onClick={settleDebt} className="flex-1 bg-accent text-white rounded-lg py-2 text-sm font-semibold">
                 Schulden beglichen
               </button>
             )}
@@ -206,7 +206,7 @@ function CreateParticipantForm({ onClose, onCreated }) {
         <input placeholder="Startguthaben € (optional)" inputMode="decimal" value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
-          <button type="submit" className="flex-1 bg-blue-600 text-white rounded-lg py-3 font-semibold">Anlegen</button>
+          <button type="submit" className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">Anlegen</button>
         </div>
       </form>
     </div>

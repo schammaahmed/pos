@@ -1,6 +1,17 @@
 @import "tailwindcss";
 
+/* v1 color scheme, kept from the previous POS version.
+   @theme registers design tokens with Tailwind - every token automatically
+   gets utility classes: bg-primary, text-accent, border-primary-dark, ... */
+@theme {
+  --color-primary: #0e7d8a;      /* teal - main actions (v1 "Pay Cash") */
+  --color-primary-dark: #1d3a45; /* dark slate-teal - secondary actions (v1 "Pay Extra") */
+  --color-accent: #c81063;       /* magenta - debt / caution (v1 "Debt") */
+  --color-page: #eef2f5;         /* page background */
+}
+
 /* system font stack - loads instantly, looks native on every device */
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--color-page);
 }
