@@ -10,6 +10,7 @@ export default function SellerPanel() {
   const [cart, setCart] = useState({}) // productId -> quantity
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [lastSale, setLastSale] = useState(null) // success screen data
+  const [categoryFilter, setCategoryFilter] = useState(null) // null = all categories
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -79,7 +80,13 @@ export default function SellerPanel() {
 
       <ParticipantPicker participant={participant} onSelect={setParticipant} />
 
-      <ProductGrid products={products} cart={cart} onAdd={addToCart} />
+      <CategoryTabs products={products} active={categoryFilter} onChange={setCategoryFilter} />
+
+      <ProductGrid
+        products={categoryFilter ? products.filter((p) => p.category === categoryFilter) : products}
+        cart={cart}
+        onAdd={addToCart}
+      />
 
       {/* sticky cart bar above the bottom nav - always one tap from checkout */}
       {itemCount > 0 && (
@@ -164,6 +171,27 @@ function ParticipantPicker({ participant, onSelect }) {
           </span>
           <span className={p.inDebt ? 'text-accent' : 'text-primary'}>{fmt(p.balance)}</span>
         </button>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- category tabs
+function CategoryTabs({ products, active, onChange }) {
+  const categories = [...new Set(products.map((p) => p.category).filter(Boolean))]
+  if (categories.length < 2) return null // one or no category -> tabs are just noise
+
+  const tabClass = (isActive) =>
+    `whitespace-nowrap rounded-full px-4 py-2 text-sm border ${
+      isActive ? 'bg-primary text-white border-primary' : 'bg-white border-gray-300'
+    }`
+
+  return (
+    // horizontal scroll instead of wrapping - keeps the grid high on small screens
+    <div className="flex gap-2 overflow-x-auto pb-1">
+      <button onClick={() => onChange(null)} className={tabClass(active === null)}>Alle</button>
+      {categories.map((c) => (
+        <button key={c} onClick={() => onChange(c)} className={tabClass(active === c)}>{c}</button>
       ))}
     </div>
   )
