@@ -9,5 +9,6 @@ public record LoginResponse(
         String lastName,
         String role,
         Long campId,    // null for SUPER_ADMIN (they belong to no single camp)
-        String campName
+        String campName,
+        boolean mustChangePassword // true -> frontend forces a password change before anything else
 ) {}

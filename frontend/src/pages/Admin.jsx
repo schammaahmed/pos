@@ -212,7 +212,12 @@ function UserForm({ camps, isSuper, onClose, onSaved }) {
         <input required placeholder="Vorname" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         <input required placeholder="Nachname" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         <input required type="email" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
-        <input required type="password" placeholder="Passwort (min. 8 Zeichen)" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
+        <input required type="password" placeholder="Temporäres Passwort (min. 8 Zeichen)" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
+        {/* the reminder the user asked for: this password is only temporary */}
+        <div className="bg-primary/10 text-primary-dark text-xs rounded-lg p-2">
+          💡 Teile dieses temporäre Passwort persönlich mit. Beim ersten Login muss die Person
+          ein eigenes Passwort setzen.
+        </div>
         <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full border rounded-lg px-3 py-3 bg-white">
           {roles.map((r) => (
             <option key={r} value={r}>{roleLabel(r)}</option>
