@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/* system font stack - loads instantly, looks native on every device */
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
