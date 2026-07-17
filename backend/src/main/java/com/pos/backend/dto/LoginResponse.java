@@ -4,6 +4,7 @@ package com.pos.backend.dto;
 // sends it back as "Authorization: Bearer <token>" on every request.
 public record LoginResponse(
         String token,
+        Long id, // the user's own id - the frontend needs it e.g. to hide "deactivate yourself"
         String firstName,
         String lastName,
         String role,

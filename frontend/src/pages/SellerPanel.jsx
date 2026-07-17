@@ -16,6 +16,19 @@ export default function SellerPanel() {
     api('/api/products').then(setProducts).catch((e) => setError(e.message))
   }, [])
 
+  // Multi-device sync via polling: every 10s the product list and the selected participant's
+  // balance are re-fetched, so a sale on ANOTHER phone shows up here too. The server-side
+  // optimistic lock is the real safety net - polling just keeps the display fresh.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      api('/api/products').then(setProducts).catch(() => {})
+      if (participant) {
+        api(`/api/participants/${participant.id}`).then(setParticipant).catch(() => {})
+      }
+    }, 10_000)
+    return () => clearInterval(interval) // stop polling when the page unmounts
+  }, [participant])
+
   const cartEntries = useMemo(
     () =>
       Object.entries(cart)
