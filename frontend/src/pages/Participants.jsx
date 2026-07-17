@@ -172,6 +172,7 @@ function CreateParticipantForm({ onClose, onCreated }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
+  const [gender, setGender] = useState(null) // 'M' | 'W' | null (optional)
   const [initialBalance, setInitialBalance] = useState('')
   const [error, setError] = useState(null)
 
@@ -184,6 +185,7 @@ function CreateParticipantForm({ onClose, onCreated }) {
           firstName,
           lastName,
           phone: phone || null,
+          gender,
           initialBalance: initialBalance ? Number(initialBalance.replace(',', '.')) : null,
         },
       })
@@ -203,6 +205,18 @@ function CreateParticipantForm({ onClose, onCreated }) {
         <input required placeholder="Vorname" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         <input required placeholder="Nachname" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         <input placeholder="Handynummer (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
+        {/* optional - powers the M/W filter in the seller panel's picker */}
+        <div className="flex gap-2 items-center">
+          <span className="text-sm text-gray-600">Geschlecht:</span>
+          {['M', 'W'].map((g) => (
+            <button key={g} type="button" onClick={() => setGender(gender === g ? null : g)}
+                    className={`rounded-full px-4 py-2 text-sm border ${
+                      gender === g ? 'bg-primary text-white border-primary' : 'bg-white border-gray-300'
+                    }`}>
+              {g}
+            </button>
+          ))}
+        </div>
         <input placeholder="Startguthaben € (optional)" inputMode="decimal" value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
