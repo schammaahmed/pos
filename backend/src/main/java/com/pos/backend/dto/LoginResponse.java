@@ -6,5 +6,7 @@ public record LoginResponse(
         String token,
         String firstName,
         String lastName,
-        String role
+        String role,
+        Long campId,    // null for SUPER_ADMIN (they belong to no single camp)
+        String campName
 ) {}

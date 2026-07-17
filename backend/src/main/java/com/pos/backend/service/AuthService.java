@@ -32,7 +32,9 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(user.getEmail(), user.getRole().name());
-        return new LoginResponse(token, user.getFirstName(), user.getLastName(), user.getRole().name());
+        return new LoginResponse(token, user.getFirstName(), user.getLastName(), user.getRole().name(),
+                user.getCamp() != null ? user.getCamp().getId() : null,
+                user.getCamp() != null ? user.getCamp().getName() : null);
     }
 
     private ResponseStatusException badCredentials() {

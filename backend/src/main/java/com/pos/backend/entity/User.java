@@ -2,6 +2,7 @@ package com.pos.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -30,6 +31,14 @@ public class User {
     @Enumerated(EnumType.STRING) // stores the role as text ("ADMIN") not a number in the database - always use STRING not ORDINAL, otherwise adding new roles breaks everything
     @Column(nullable = false)
     private Role role;
+
+    // Which camp this user belongs to. Nullable on purpose: a SUPER_ADMIN belongs to no camp and sees everything.
+    // EAGER (not LAZY) because the logged-in user is loaded inside the JWT filter, BEFORE the request's
+    // database session exists - a lazy camp would blow up with LazyInitializationException when accessed later.
+    @ToString.Exclude // @Data generates toString - excluding relations avoids surprise DB queries when the user gets logged
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "camp_id")
+    private Camp camp;
 
     @Column(nullable = false)
     private boolean active = true;
