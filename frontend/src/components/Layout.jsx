@@ -10,10 +10,10 @@ export default function Layout() {
   if (!user) return <Navigate to="/login" replace />
 
   const tabClass = ({ isActive }) =>
-    `flex-1 py-3 text-center text-xs font-medium ${isActive ? 'text-blue-600' : 'text-gray-500'}`
+    `flex-1 py-3 text-center text-xs font-medium ${isActive ? 'text-primary' : 'text-gray-500'}`
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-16">
+    <div className="min-h-screen bg-page pb-16">
       {/* top bar: who am I, which camp, logout */}
       <header className="bg-white shadow-sm px-4 py-2 flex items-center justify-between sticky top-0 z-10">
         <div>

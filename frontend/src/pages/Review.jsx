@@ -52,7 +52,7 @@ export default function Review() {
           <div className="text-sm text-gray-600">
             {sale.participantName ? `Teilnehmer: ${sale.participantName}` : 'Barverkauf'} · storniert
           </div>
-          <button onClick={() => approve(sale)} className="w-full bg-green-600 text-white rounded-lg py-2 font-semibold">
+          <button onClick={() => approve(sale)} className="w-full bg-primary text-white rounded-lg py-2 font-semibold">
             ✓ Geprüft und in Ordnung
           </button>
         </div>

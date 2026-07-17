@@ -26,7 +26,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-page flex items-center justify-center p-4">
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-6 w-full max-w-sm space-y-4">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Camp Kiosk</h1>
@@ -59,7 +59,7 @@ export default function Login() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full bg-blue-600 text-white rounded-lg py-3 font-semibold disabled:opacity-50"
+          className="w-full bg-primary text-white rounded-lg py-3 font-semibold disabled:opacity-50"
         >
           {busy ? 'Anmelden…' : 'Anmelden'}
         </button>

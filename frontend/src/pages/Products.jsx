@@ -37,7 +37,7 @@ export default function Products() {
   return (
     <div className="space-y-4">
       {canEdit && (
-        <button onClick={() => setEditing('new')} className="w-full bg-blue-600 text-white rounded-lg py-3 font-semibold">
+        <button onClick={() => setEditing('new')} className="w-full bg-primary text-white rounded-lg py-3 font-semibold">
           + Produkt anlegen
         </button>
       )}
@@ -49,7 +49,7 @@ export default function Products() {
             {p.imageUrl ? (
               <img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
             ) : (
-              <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-xl">🛍️</div>
+              <div className="w-12 h-12 rounded-lg bg-page flex items-center justify-center text-xl">🛍️</div>
             )}
             <div className="flex-1">
               <div className="font-medium">{p.name}</div>
@@ -124,7 +124,7 @@ function ProductForm({ product, onClose, onSaved }) {
         {imageUrl && <img src={imageUrl} alt="Vorschau" className="w-20 h-20 rounded-lg object-cover" />}
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
-          <button type="submit" className="flex-1 bg-blue-600 text-white rounded-lg py-3 font-semibold">Speichern</button>
+          <button type="submit" className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">Speichern</button>
         </div>
       </form>
     </div>
