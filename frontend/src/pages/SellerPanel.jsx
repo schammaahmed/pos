@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import { fmt, fromCents, previewSplit, toCents } from '../money'
+import { fmt, fromCents, toCents } from '../money'
 import ParticipantPickerSheet, { rememberRecentParticipant } from '../components/ParticipantPickerSheet'
 
 // The heart of the POS. Flow: pick participant (or anonymous) -> tap products into
@@ -139,7 +139,9 @@ function ParticipantBar({ participant, onOpenPicker, onClear }) {
             {participant.firstName} {participant.lastName}
           </div>
           <div className={`text-sm ${participant.inDebt ? 'text-accent' : 'text-primary'}`}>
-            Guthaben: {fmt(participant.balance)}
+            {participant.inDebt
+              ? `Offene Schulden: ${fmt(Math.abs(Number(participant.balance)))}`
+              : `Guthaben: ${fmt(participant.balance)}`}
           </div>
         </button>
         <button onClick={onClear} className="text-sm text-gray-500 border rounded-lg px-3 py-2">
@@ -212,30 +214,42 @@ function ProductGrid({ products, cart, onAdd }) {
 // ---------------------------------------------------------------- checkout
 function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold }) {
   const [cashInput, setCashInput] = useState('') // what the buyer hands over, as typed
-  const [useBalance, setUseBalance] = useState(!!participant) // default: pay from balance if there is an account
-  const [keepChange, setKeepChange] = useState(false)
+  // The seller must ACTIVELY choose one method - no default. Each method is a single, clear
+  // intent, so cash and balance can never silently fight each other (the old bug).
+  const [method, setMethod] = useState(null) // null (not chosen yet) | 'cash' | 'balance' | 'debt'
+  const [payExtra, setPayExtra] = useState(false) // "stimmt so" -> overpaid cash becomes credit (cash mode only)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  // the participant can be picked/changed WHILE the Kasse is open - re-sync the defaults
-  useEffect(() => {
-    setUseBalance(!!participant)
-    if (!participant) setKeepChange(false) // no account -> nothing to credit
-  }, [participant?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const cashCents = toCents(cashInput === '' ? 0 : cashInput.replace(',', '.'))
   const balanceCents = participant ? toCents(participant.balance) : 0
 
-  // live preview - the seller SEES debt/credit/change before confirming (the "final check")
-  const split = previewSplit({
-    totalCents,
-    cashCents,
-    balanceCents,
-    useBalance,
-    keepChangeAsCredit: keepChange,
-  })
+  // Guthaben and Schulden need a named account. If the participant is removed while one of
+  // those is selected, drop back to "nothing chosen" so the seller has to decide again.
+  useEffect(() => {
+    if (!participant) {
+      setMethod((m) => (m === 'balance' || m === 'debt' ? null : m))
+      setPayExtra(false)
+    }
+  }, [participant?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const anonymousUnderpaid = !participant && split.debt > 0
+  const cashCents = method === 'cash' ? toCents(cashInput === '' ? 0 : cashInput.replace(',', '.')) : 0
+  const overpaidCents = Math.max(cashCents - totalCents, 0)
+
+  // What (if anything) blocks the sale. Each is surfaced as its own prompt below.
+  const needsParticipant = (method === 'balance' || method === 'debt') && !participant // debt/credit need a person
+  const balanceShort = method === 'balance' && participant && balanceCents < totalCents  // Guthaben must fully cover
+  const cashShort = method === 'cash' && cashCents < totalCents                          // Bar must fully cover (never auto-debt)
+  const canConfirm = !!method && !needsParticipant && !balanceShort && !cashShort && cartEntries.length > 0 && !busy
+
+  // the three values sent to the backend, derived from the single chosen method
+  const useBalance = method === 'balance'
+  const keepChangeAsCredit = method === 'cash' && payExtra && !!participant
+
+  // tapping the already-active method clears it again (back to "nothing chosen")
+  function chooseMethod(next) {
+    setMethod((current) => (current === next ? null : next))
+    setPayExtra(false) // "stimmt so" belongs to one specific cash entry, never carry it over
+  }
 
   async function confirm() {
     setBusy(true)
@@ -248,7 +262,7 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPi
           items: cartEntries.map((e) => ({ productId: e.product.id, quantity: e.qty })),
           cashGiven: fromCents(cashCents),
           useBalance,
-          keepChangeAsCredit: keepChange,
+          keepChangeAsCredit,
         },
       })
       onSold(sale)
@@ -274,7 +288,12 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPi
                 className="w-full bg-gray-50 rounded-xl p-3 flex items-center justify-between text-left">
           <span className="text-sm text-gray-700">
             {participant
-              ? <>Verkauf an <span className="font-semibold">{participant.firstName} {participant.lastName}</span> · Guthaben {fmt(participant.balance)}</>
+              ? <>
+                  Verkauf an <span className="font-semibold">{participant.firstName} {participant.lastName}</span>
+                  {participant.inDebt
+                    ? <> · offene Schulden {fmt(Math.abs(Number(participant.balance)))}</>
+                    : <> · Guthaben {fmt(participant.balance)}</>}
+                </>
               : 'Barverkauf (ohne Teilnehmer)'}
           </span>
           <span className="text-sm text-primary font-semibold">{participant ? 'Ändern' : 'Teilnehmer wählen'}</span>
@@ -303,70 +322,111 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPi
           </div>
         </div>
 
-        {/* payment */}
+        {/* payment method: exactly one active at a time */}
         <div className="space-y-3">
-          <label className="block">
-            <span className="text-sm font-medium">Bar erhalten</span>
-            <input
-              inputMode="decimal"
-              placeholder="0,00"
-              value={cashInput}
-              onChange={(e) => setCashInput(e.target.value)}
-              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-3 text-lg"
+          <span className="text-sm font-medium">Zahlung</span>
+          <div className="grid grid-cols-3 gap-2">
+            {/* all three are always selectable; picking Guthaben/Schulden without a
+                participant prompts for one below (a walk-in from outside the camp pays cash) */}
+            <MethodButton active={method === 'cash'} onClick={() => chooseMethod('cash')} label="Bar" />
+            <MethodButton
+              active={method === 'balance'}
+              onClick={() => chooseMethod('balance')}
+              label="Guthaben"
+              // available credit - someone in debt has none, so show 0,00 € rather than a
+              // contradictory negative amount on a "Guthaben" button
+              hint={participant ? fmt(Math.max(Number(participant.balance), 0)) : null}
             />
-          </label>
-          <div className="flex gap-2">
-            {[5, 10, 20].map((bill) => (
-              <button
-                key={bill}
-                onClick={() => setCashInput(String(bill))}
-                className="flex-1 border rounded-lg py-2 text-sm bg-gray-50"
-              >
-                {bill} €
-              </button>
-            ))}
-            <button onClick={() => setCashInput('')} className="flex-1 border rounded-lg py-2 text-sm bg-gray-50">
-              0 €
-            </button>
+            <MethodButton active={method === 'debt'} onClick={() => chooseMethod('debt')} label="Schulden" />
           </div>
 
-          {participant && (
-            <>
-              <label className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                <input type="checkbox" checked={useBalance} onChange={(e) => setUseBalance(e.target.checked)} className="w-5 h-5" />
-                <span>Guthaben verwenden ({fmt(participant.balance)})</span>
+          {/* cash details only in cash mode */}
+          {method === 'cash' && (
+            <div className="space-y-2">
+              <label className="block">
+                <span className="text-sm text-gray-600">Bar erhalten</span>
+                <input
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  value={cashInput}
+                  onChange={(e) => setCashInput(e.target.value)}
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-3 text-lg"
+                />
               </label>
-              {split.changeToReturn > 0 || keepChange ? (
+              <div className="flex gap-2">
+                {[5, 10, 20].map((bill) => (
+                  <button key={bill} onClick={() => setCashInput(String(bill))}
+                          className="flex-1 border rounded-lg py-2 text-sm bg-gray-50">
+                    {bill} €
+                  </button>
+                ))}
+                <button onClick={() => setCashInput('')} className="flex-1 border rounded-lg py-2 text-sm bg-gray-50">
+                  0 €
+                </button>
+              </div>
+              {/* pay-extra ("stimmt so") only makes sense when there's overpayment and an account to credit */}
+              {participant && overpaidCents > 0 && (
                 <label className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                  <input type="checkbox" checked={keepChange} onChange={(e) => setKeepChange(e.target.checked)} className="w-5 h-5" />
+                  <input type="checkbox" checked={payExtra} onChange={(e) => setPayExtra(e.target.checked)} className="w-5 h-5" />
                   <span>Rest als Guthaben behalten („stimmt so“)</span>
                 </label>
-              ) : null}
-            </>
+              )}
+            </div>
           )}
         </div>
 
-        {/* live preview of what confirming will do */}
-        <div className="bg-primary/10 rounded-xl p-4 text-sm space-y-1">
-          {split.paidCash > 0 && <Row label="Bar bezahlt" value={fmt(fromCents(split.paidCash))} />}
-          {split.paidFromBalance > 0 && <Row label="Vom Guthaben" value={fmt(fromCents(split.paidFromBalance))} />}
-          {split.debt > 0 && <Row label="Auf Schulden" value={fmt(fromCents(split.debt))} red />}
-          {split.extraCredited > 0 && <Row label="Als Guthaben gutgeschrieben" value={fmt(fromCents(split.extraCredited))} />}
-          {split.changeToReturn > 0 && (
-            <Row label="Wechselgeld zurückgeben" value={fmt(fromCents(split.changeToReturn))} bold />
-          )}
-          {participant && (
-            <Row
-              label="Guthaben danach"
-              value={fmt(fromCents(balanceCents - split.paidFromBalance - split.debt + split.extraCredited))}
-              bold
-            />
-          )}
-        </div>
+        {/* summary of what confirming will do - only shown once a valid method is set up */}
+        {method && !needsParticipant && !cashShort && !balanceShort && (
+          <div className="bg-primary/10 rounded-xl p-4 text-sm space-y-1">
+            {method === 'cash' && (
+              <>
+                <Row label="Bar bezahlt" value={fmt(fromCents(Math.min(cashCents, totalCents)))} />
+                {overpaidCents > 0 && !payExtra && (
+                  <Row label="Wechselgeld zurückgeben" value={fmt(fromCents(overpaidCents))} bold />
+                )}
+                {overpaidCents > 0 && payExtra && (
+                  <Row label="Als Guthaben gutgeschrieben" value={fmt(fromCents(overpaidCents))} />
+                )}
+                {participant && <BalanceRow cents={balanceCents + (payExtra ? overpaidCents : 0)} />}
+              </>
+            )}
+            {method === 'balance' && (
+              <>
+                <Row label="Vom Guthaben" value={fmt(fromCents(totalCents))} />
+                <BalanceRow cents={balanceCents - totalCents} />
+              </>
+            )}
+            {method === 'debt' && (
+              <>
+                <Row label="Auf Schulden" value={fmt(fromCents(totalCents))} red />
+                <BalanceRow cents={balanceCents - totalCents} />
+              </>
+            )}
+          </div>
+        )}
 
-        {anonymousUnderpaid && (
+        {/* prompts: tell the seller exactly what's missing before they can confirm */}
+        {!method && (
           <div className="bg-yellow-50 text-yellow-800 text-sm rounded-lg p-3">
-            Barverkauf: Der Betrag muss voll in bar bezahlt werden.
+            Bitte eine Zahlungsart wählen.
+          </div>
+        )}
+        {needsParticipant && (
+          <div className="bg-yellow-50 text-yellow-800 text-sm rounded-lg p-3 flex items-center justify-between gap-3">
+            <span>Für {method === 'balance' ? 'Guthaben' : 'Schulden'} zuerst einen Teilnehmer wählen.</span>
+            <button onClick={onPickParticipant} className="shrink-0 bg-primary text-white rounded-lg px-3 py-2 text-sm font-semibold">
+              Teilnehmer wählen
+            </button>
+          </div>
+        )}
+        {cashShort && (
+          <div className="bg-yellow-50 text-yellow-800 text-sm rounded-lg p-3">
+            Es fehlen {fmt(fromCents(totalCents - cashCents))} — bei „Bar“ muss der Betrag voll bezahlt werden.
+          </div>
+        )}
+        {balanceShort && (
+          <div className="bg-yellow-50 text-yellow-800 text-sm rounded-lg p-3">
+            Guthaben reicht nicht ({fmt(participant.balance)}). Bitte „Bar“ oder „Schulden“ wählen.
           </div>
         )}
         {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
@@ -375,13 +435,39 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPi
       <div className="fixed bottom-0 inset-x-0 bg-white border-t p-4">
         <button
           onClick={confirm}
-          disabled={busy || cartEntries.length === 0 || anonymousUnderpaid}
+          disabled={!canConfirm}
           className="w-full max-w-3xl mx-auto block bg-primary text-white rounded-xl py-4 font-semibold text-lg disabled:opacity-40"
         >
           {busy ? 'Wird gebucht…' : `Verkauf bestätigen · ${fmt(fromCents(totalCents))}`}
         </button>
       </div>
     </div>
+  )
+}
+
+// one payment-method choice in the segmented control
+function MethodButton({ active, disabled, onClick, label, hint }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-lg py-3 px-2 text-sm font-semibold border text-center leading-tight ${
+        active ? 'bg-primary text-white border-primary' : 'bg-white border-gray-300'
+      } ${disabled ? 'opacity-40' : ''}`}
+    >
+      {label}
+      {hint && <div className="text-xs font-normal opacity-80">{hint}</div>}
+    </button>
+  )
+}
+
+// A negative balance is debt. Never show "Guthaben: -1,00 €" - at the stand that reads
+// wrong. Show it as a positive "Offene Schulden" amount instead.
+function BalanceRow({ cents }) {
+  return cents < 0 ? (
+    <Row label="Offene Schulden" value={fmt(fromCents(-cents))} bold red />
+  ) : (
+    <Row label="Guthaben danach" value={fmt(fromCents(cents))} bold />
   )
 }
 
@@ -409,11 +495,16 @@ function SuccessView({ sale, onDone }) {
           Wechselgeld: <span className="font-bold">{fmt(sale.changeToReturn)}</span>
         </div>
       )}
-      {sale.newBalance !== null && (
-        <div className={`text-lg ${Number(sale.newBalance) < 0 ? 'text-accent' : 'text-primary'}`}>
-          Neues Guthaben: <span className="font-bold">{fmt(sale.newBalance)}</span>
-        </div>
-      )}
+      {sale.newBalance !== null &&
+        (Number(sale.newBalance) < 0 ? (
+          <div className="text-lg text-accent">
+            Offene Schulden: <span className="font-bold">{fmt(Math.abs(Number(sale.newBalance)))}</span>
+          </div>
+        ) : (
+          <div className="text-lg text-primary">
+            Neues Guthaben: <span className="font-bold">{fmt(sale.newBalance)}</span>
+          </div>
+        ))}
 
       <button onClick={onDone} className="w-full bg-primary text-white rounded-xl py-4 font-semibold">
         Weiter verkaufen
