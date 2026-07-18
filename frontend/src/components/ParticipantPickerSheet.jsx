@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { LayoutGrid, List, Search, X } from 'lucide-react'
 import { api } from '../api'
 import { fmt } from '../money'
 
@@ -73,14 +74,20 @@ export default function ParticipantPickerSheet({ onSelect, onClose }) {
       {/* header: search + filters, stays while the list scrolls */}
       <div className="bg-white shadow-sm p-3 space-y-2">
         <div className="flex gap-2">
-          <input
-            autoFocus
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="🔍 Suchen…"
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-3"
-          />
-          <button onClick={onClose} className="border rounded-lg px-3 text-gray-500">✕</button>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Suchen…"
+              className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-3"
+            />
+          </div>
+          <button onClick={onClose} title="Schließen"
+                  className="border rounded-lg px-3 text-gray-500 hover:bg-gray-50 flex items-center">
+            <X className="w-5 h-5" />
+          </button>
         </div>
         <div className="flex gap-2 items-center">
           {hasGenders && (
@@ -92,8 +99,9 @@ export default function ParticipantPickerSheet({ onSelect, onClose }) {
           )}
           <div className="flex-1" />
           {/* view toggle: list with A-Z rail vs. big-button grid */}
-          <button onClick={() => setView(view === 'list' ? 'grid' : 'list')} className="border rounded-lg px-3 py-2 text-sm bg-white">
-            {view === 'list' ? '▦ Raster' : '☰ Liste'}
+          <button onClick={() => setView(view === 'list' ? 'grid' : 'list')}
+                  className="border rounded-lg px-3 py-2 text-sm bg-white hover:bg-gray-50 flex items-center gap-1.5">
+            {view === 'list' ? <><LayoutGrid className="w-4 h-4" /> Raster</> : <><List className="w-4 h-4" /> Liste</>}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Lightbulb } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 
@@ -214,9 +215,12 @@ function UserForm({ camps, isSuper, onClose, onSaved }) {
         <input required type="email" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         <input required type="password" placeholder="Temporäres Passwort (min. 8 Zeichen)" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         {/* the reminder the user asked for: this password is only temporary */}
-        <div className="bg-primary/10 text-primary-dark text-xs rounded-lg p-2">
-          💡 Teile dieses temporäre Passwort persönlich mit. Beim ersten Login muss die Person
-          ein eigenes Passwort setzen.
+        <div className="bg-primary/10 text-primary-dark text-xs rounded-lg p-2 flex gap-2">
+          <Lightbulb className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Teile dieses temporäre Passwort persönlich mit. Beim ersten Login muss die Person
+            ein eigenes Passwort setzen.
+          </span>
         </div>
         <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full border rounded-lg px-3 py-3 bg-white">
           {roles.map((r) => (

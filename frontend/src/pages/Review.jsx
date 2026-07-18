@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Check, CheckCircle2 } from 'lucide-react'
 import { api } from '../api'
 import { fmt } from '../money'
 
@@ -35,8 +36,9 @@ export default function Review() {
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
       {sales.length === 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-6 text-center text-gray-400">
-          ✅ Nichts zu prüfen - alles sauber!
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center text-gray-400">
+          <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+          Nichts zu prüfen – alles sauber!
         </div>
       )}
 
@@ -52,8 +54,9 @@ export default function Review() {
           <div className="text-sm text-gray-600">
             {sale.participantName ? `Teilnehmer: ${sale.participantName}` : 'Barverkauf'} · storniert
           </div>
-          <button onClick={() => approve(sale)} className="w-full bg-primary text-white rounded-lg py-2 font-semibold">
-            ✓ Geprüft und in Ordnung
+          <button onClick={() => approve(sale)}
+                  className="w-full bg-primary text-white rounded-lg py-2 font-semibold flex items-center justify-center gap-1.5">
+            <Check className="w-4 h-4" /> Geprüft und in Ordnung
           </button>
         </div>
       ))}

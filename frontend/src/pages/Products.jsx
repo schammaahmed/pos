@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Eye, EyeOff, Package, Pencil, X } from 'lucide-react'
 import { api } from '../api'
 import { useAuth, isLead } from '../auth'
 import { fmt } from '../money'
@@ -45,14 +46,16 @@ export default function Products() {
 
       <div className="bg-white rounded-xl shadow-sm divide-y">
         {products.map((p) => (
-          <div key={p.id} className={`flex items-center gap-3 p-3 ${p.active ? '' : 'opacity-50'}`}>
+          <div key={p.id} className={`flex items-center gap-3 p-3 hover:bg-gray-50 ${p.active ? '' : 'opacity-50'}`}>
             {p.imageUrl ? (
-              <img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
+              <img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
             ) : (
-              <div className="w-12 h-12 rounded-lg bg-page flex items-center justify-center text-xl">🛍️</div>
+              <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                <Package className="w-5 h-5 text-gray-300" />
+              </div>
             )}
-            <div className="flex-1">
-              <div className="font-medium">{p.name}</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate">{p.name}</div>
               <div className="text-sm text-gray-500">
                 {p.category || 'Ohne Kategorie'} · {fmt(p.price)}
                 {!p.active && ' · deaktiviert'}
@@ -60,11 +63,13 @@ export default function Products() {
             </div>
             {canEdit && (
               <>
-                <button onClick={() => setEditing(p)} className="text-sm border rounded-lg px-3 py-2">
-                  ✏️
+                <button onClick={() => setEditing(p)} title="Bearbeiten"
+                        className="border rounded-lg p-2 text-gray-600 hover:bg-gray-100">
+                  <Pencil className="w-4 h-4" />
                 </button>
-                <button onClick={() => toggleActive(p)} className="text-sm border rounded-lg px-3 py-2">
-                  {p.active ? '⏸' : '▶️'}
+                <button onClick={() => toggleActive(p)} title={p.active ? 'Deaktivieren' : 'Aktivieren'}
+                        className="border rounded-lg p-2 text-gray-600 hover:bg-gray-100">
+                  {p.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </>
             )}
@@ -136,7 +141,9 @@ function ProductForm({ product, categories, onClose, onSaved }) {
                 className="flex-1 border rounded-lg px-3 py-3"
               />
               <button type="button" onClick={() => { setNewCategoryMode(false); setCategory('') }}
-                      className="border rounded-lg px-3 text-gray-500">✕</button>
+                      className="border rounded-lg px-3 text-gray-500 hover:bg-gray-50 flex items-center">
+                <X className="w-4 h-4" />
+              </button>
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">

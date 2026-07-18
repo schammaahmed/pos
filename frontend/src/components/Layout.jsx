@@ -1,13 +1,35 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
+import { ClipboardCheck, KeyRound, LogOut, Menu, Package, Settings, ShoppingCart, Users } from 'lucide-react'
 import { useAuth, isLead } from '../auth'
 import ChangePassword from './ChangePassword'
 
-// The frame around every page after login: content on top, tab bar at the bottom.
-// Bottom navigation because sellers hold phones - thumbs live at the bottom of the screen.
+const SIDEBAR_KEY = 'pos_sidebar_collapsed'
+
+// The frame around every page. Structure follows the previous POS version:
+// a full-width top bar (logo left, date/time centre, greeting right) plus a left
+// icon rail on desktop. On phones the rail becomes a bottom tab bar, because
+// sellers hold the device one-handed and thumbs reach the bottom.
 export default function Layout() {
   const { user, logout } = useAuth()
   const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1')
+  const [now, setNow] = useState(() => new Date())
+
+  // keep the clock in the top bar roughly current without re-rendering constantly
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Compute the next value first, THEN update state and storage. Never put a side effect
+  // inside a setState updater: React invokes updaters twice in StrictMode to check they are
+  // pure, which would toggle this twice and appear to do nothing.
+  function toggleSidebar() {
+    const next = !collapsed
+    setCollapsed(next)
+    localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0') // remember the choice per device
+  }
 
   // not logged in? -> everything inside this layout is off limits
   if (!user) return <Navigate to="/login" replace />
@@ -16,55 +38,125 @@ export default function Layout() {
   if (user.mustChangePassword) {
     return (
       <div className="min-h-screen bg-page">
-        <header className="bg-white shadow-sm px-4 py-2 flex items-center justify-between">
+        <header className="bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between">
           <span className="font-bold">Camp Kiosk</span>
-          <button onClick={logout} className="text-sm text-gray-500">Abmelden</button>
+          <button onClick={logout} className="text-sm text-gray-500 flex items-center gap-1">
+            <LogOut className="w-4 h-4" /> Abmelden
+          </button>
         </header>
         <ChangePassword forced />
       </div>
     )
   }
 
-  const tabClass = ({ isActive }) =>
-    `flex-1 py-3 text-center text-xs font-medium ${isActive ? 'text-primary' : 'text-gray-500'}`
+  // one source of truth for both the desktop rail and the mobile tab bar
+  const navItems = [
+    ...(user.role !== 'SUPER_ADMIN' ? [{ to: '/sell', label: 'Verkaufen', Icon: ShoppingCart }] : []),
+    { to: '/participants', label: 'Teilnehmer', Icon: Users },
+    { to: '/products', label: 'Produkte', Icon: Package },
+    ...(isLead(user) && user.role !== 'SUPER_ADMIN' ? [{ to: '/review', label: 'Prüfen', Icon: ClipboardCheck }] : []),
+    ...(['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role) ? [{ to: '/admin', label: 'Admin', Icon: Settings }] : []),
+  ]
+
+  const dateLine =
+    now.toLocaleDateString('de-AT', { weekday: 'long', day: 'numeric', month: 'long' }) +
+    ' um ' +
+    now.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })
 
   return (
-    <div className="min-h-screen bg-page pb-16">
-      {/* top bar: who am I, which camp, logout */}
-      <header className="bg-white shadow-sm px-4 py-2 flex items-center justify-between sticky top-0 z-10">
-        <div>
-          <span className="font-bold">Camp Kiosk</span>
-          {user.campName && <span className="text-sm text-gray-500 ml-2">{user.campName}</span>}
-        </div>
-        <div className="flex items-center gap-3">
-          {/* voluntary password change, always reachable */}
-          <button onClick={() => setShowPasswordForm(true)} className="text-sm text-gray-500" title="Passwort ändern">
-            🔑
+    <div className="min-h-screen bg-page">
+      {/* ---------------------------------------------------------------- top bar */}
+      <header className="fixed top-0 inset-x-0 h-14 bg-white border-b border-gray-200 z-30 flex items-center px-3 md:px-4">
+        {/* left: collapse toggle + wordmark */}
+        <div className="flex items-center gap-2 shrink-0 md:w-56">
+          <button
+            onClick={toggleSidebar}
+            className="hidden md:flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:bg-gray-100"
+            title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'}
+          >
+            <Menu className="w-5 h-5" />
           </button>
-          <button onClick={logout} className="text-sm text-gray-500">
-            {user.firstName} · Abmelden
+          <span className="font-bold text-primary">Camp Kiosk</span>
+        </div>
+
+        {/* centre: date and time, like v1 (hidden on phones - no room) */}
+        <div className="hidden md:block flex-1 text-center text-sm text-gray-500">{dateLine}</div>
+
+        {/* right: greeting + account actions */}
+        <div className="ml-auto md:ml-0 flex items-center gap-1 shrink-0 md:w-56 md:justify-end">
+          <span className="hidden sm:inline text-sm text-gray-600 mr-1">
+            Hallo, <span className="font-semibold text-gray-900">{user.firstName}</span>
+          </span>
+          <button
+            onClick={() => setShowPasswordForm(true)}
+            className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:bg-gray-100"
+            title="Passwort ändern"
+          >
+            <KeyRound className="w-5 h-5" />
+          </button>
+          <button
+            onClick={logout}
+            className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:bg-gray-100"
+            title="Abmelden"
+          >
+            <LogOut className="w-5 h-5" />
           </button>
         </div>
       </header>
 
-      {showPasswordForm && <ChangePassword onClose={() => setShowPasswordForm(false)} />}
+      {/* ---------------------------------------------------------------- sidebar (desktop) */}
+      <aside
+        className={`hidden md:flex flex-col fixed top-14 bottom-0 left-0 bg-white border-r border-gray-200 z-20 py-3 transition-[width] ${
+          collapsed ? 'w-16' : 'w-56'
+        }`}
+      >
+        {navItems.map(({ to, label, Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            title={collapsed ? label : undefined}
+            className={({ isActive }) =>
+              `flex items-center gap-3 mx-2 mb-1 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                isActive ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
+              } ${collapsed ? 'justify-center' : ''}`
+            }
+          >
+            <Icon className="w-5 h-5 shrink-0" />
+            {!collapsed && <span>{label}</span>}
+          </NavLink>
+        ))}
 
-      <main className="p-4 max-w-3xl mx-auto">
-        <Outlet /> {/* the current page renders here */}
+        {/* camp name sits at the bottom of the rail so it's always visible but never in the way */}
+        {user.campName && !collapsed && (
+          <div className="mt-auto px-5 text-xs text-gray-400 leading-snug">{user.campName}</div>
+        )}
+      </aside>
+
+      {/* ---------------------------------------------------------------- content */}
+      <main className={`pt-14 pb-24 md:pb-8 ${collapsed ? 'md:pl-16' : 'md:pl-56'}`}>
+        <div className="max-w-6xl mx-auto p-4">
+          <Outlet /> {/* the current page renders here */}
+        </div>
       </main>
 
-      <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 flex z-10">
-        {user.role !== 'SUPER_ADMIN' && (
-          <NavLink to="/sell" className={tabClass}>🛒<div>Verkaufen</div></NavLink>
-        )}
-        <NavLink to="/participants" className={tabClass}>👥<div>Teilnehmer</div></NavLink>
-        <NavLink to="/products" className={tabClass}>🏪<div>Produkte</div></NavLink>
-        {isLead(user) && user.role !== 'SUPER_ADMIN' && (
-          <NavLink to="/review" className={tabClass}>🔍<div>Prüfen</div></NavLink>
-        )}
-        {['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role) && (
-          <NavLink to="/admin" className={tabClass}>⚙️<div>Admin</div></NavLink>
-        )}
+      {showPasswordForm && <ChangePassword onClose={() => setShowPasswordForm(false)} />}
+
+      {/* ---------------------------------------------------------------- bottom tabs (mobile) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 flex z-30">
+        {navItems.map(({ to, label, Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${
+                isActive ? 'text-primary' : 'text-gray-500'
+              }`
+            }
+          >
+            <Icon className="w-5 h-5" />
+            {label}
+          </NavLink>
+        ))}
       </nav>
     </div>
   )

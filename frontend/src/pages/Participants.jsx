@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Search, Wallet } from 'lucide-react'
 import { api } from '../api'
 import { useAuth, isLead } from '../auth'
 import { fmt } from '../money'
@@ -32,12 +33,15 @@ export default function Participants() {
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍 Suchen…"
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-3"
-        />
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Suchen…"
+            className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-3"
+          />
+        </div>
         {isLead(user) && (
           <button onClick={() => setShowCreate(true)} className="bg-primary text-white rounded-lg px-4 font-semibold">
             + Neu
@@ -49,8 +53,9 @@ export default function Participants() {
 
       {openDebts.length > 0 && (
         <div className="text-sm text-gray-500">
+          {/* debts are stored as negative balances - show the total owed as a positive amount */}
           {openDebts.length} Teilnehmer mit offenen Schulden (
-          {fmt(openDebts.reduce((sum, p) => sum + Number(p.balance), 0))})
+          {fmt(Math.abs(openDebts.reduce((sum, p) => sum + Number(p.balance), 0)))})
         </div>
       )}
 
@@ -125,8 +130,9 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
           {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-2">{error}</div>}
 
           <div className="flex gap-2">
-            <button onClick={deposit} className="flex-1 bg-primary text-white rounded-lg py-2 text-sm font-semibold">
-              💶 Einzahlen
+            <button onClick={deposit}
+                    className="flex-1 bg-primary text-white rounded-lg py-2 text-sm font-semibold flex items-center justify-center gap-1.5">
+              <Wallet className="w-4 h-4" /> Einzahlen
             </button>
             {canSettle && participant.inDebt && (
               <button onClick={settleDebt} className="flex-1 bg-accent text-white rounded-lg py-2 text-sm font-semibold">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, CheckCircle2, Minus, Package, Plus, ShoppingCart, UserRound, X } from 'lucide-react'
 import { api } from '../api'
 import { fmt, fromCents, toCents } from '../money'
 import ParticipantPickerSheet, { rememberRecentParticipant } from '../components/ParticipantPickerSheet'
@@ -95,9 +96,10 @@ export default function SellerPanel() {
       {itemCount > 0 && (
         <button
           onClick={() => setCheckoutOpen(true)}
-          className="fixed bottom-16 inset-x-4 max-w-3xl mx-auto bg-primary text-white rounded-xl py-4 font-semibold shadow-lg z-20"
+          className="fixed bottom-20 md:bottom-6 inset-x-4 md:inset-x-auto md:right-6 md:left-auto max-w-3xl md:max-w-none mx-auto bg-primary text-white rounded-xl py-4 md:px-6 font-semibold shadow-lg z-20 flex items-center justify-center gap-2"
         >
-          🛒 {itemCount} Artikel · {fmt(fromCents(totalCents))} · Zur Kasse
+          <ShoppingCart className="w-5 h-5" />
+          {itemCount} Artikel · {fmt(fromCents(totalCents))} · Zur Kasse
         </button>
       )}
 
@@ -144,8 +146,8 @@ function ParticipantBar({ participant, onOpenPicker, onClear }) {
               : `Guthaben: ${fmt(participant.balance)}`}
           </div>
         </button>
-        <button onClick={onClear} className="text-sm text-gray-500 border rounded-lg px-3 py-2">
-          ✕ Barverkauf
+        <button onClick={onClear} className="text-sm text-gray-500 border rounded-lg px-3 py-2 flex items-center gap-1 hover:bg-gray-50">
+          <X className="w-4 h-4" /> Barverkauf
         </button>
       </div>
     )
@@ -153,8 +155,10 @@ function ParticipantBar({ participant, onOpenPicker, onClear }) {
 
   return (
     <button onClick={onOpenPicker}
-            className="w-full bg-white rounded-xl shadow-sm p-4 flex items-center justify-between text-gray-600">
-      <span>👥 Teilnehmer wählen…</span>
+            className="w-full bg-white rounded-xl shadow-sm p-4 flex items-center justify-between text-gray-600 hover:shadow-md transition">
+      <span className="flex items-center gap-2">
+        <UserRound className="w-5 h-5 text-gray-400" /> Teilnehmer wählen…
+      </span>
       <span className="text-sm text-gray-400">ohne = Barverkauf</span>
     </button>
   )
@@ -183,28 +187,46 @@ function CategoryTabs({ products, active, onChange }) {
 
 // ---------------------------------------------------------------- product grid
 function ProductGrid({ products, cart, onAdd }) {
+  if (products.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-400 text-sm">
+        Keine Produkte in dieser Kategorie.
+      </div>
+    )
+  }
+
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+    // 2 columns on a phone (big tap targets), up to 4 on a laptop like the previous version
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
       {products.map((p) => (
         <button
           key={p.id}
           onClick={() => onAdd(p)}
-          className="relative bg-white rounded-xl shadow-sm p-2 flex flex-col items-center active:scale-95 transition-transform"
+          className="relative bg-white rounded-xl shadow-sm overflow-hidden text-left hover:shadow-md active:scale-[0.98] transition"
         >
           {cart[p.id] > 0 && (
-            <span className="absolute -top-2 -right-2 bg-primary text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold">
+            <span className="absolute top-2 right-2 z-10 bg-primary text-white text-xs rounded-full min-w-6 h-6 px-1.5 flex items-center justify-center font-bold shadow">
               {cart[p.id]}
             </span>
           )}
-          {p.imageUrl ? (
-            <img src={p.imageUrl} alt={p.name} className="w-full aspect-square object-cover rounded-lg" />
-          ) : (
-            <div className="w-full aspect-square rounded-lg bg-page flex items-center justify-center text-3xl">
-              🛍️
+          <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center">
+            {p.imageUrl ? (
+              <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+            ) : (
+              <Package className="w-8 h-8 text-gray-300" />
+            )}
+          </div>
+          <div className="p-3">
+            <div className="flex items-start justify-between gap-2">
+              <span className="font-semibold text-sm leading-tight">{p.name}</span>
+              {p.category && (
+                <span className="shrink-0 text-[10px] text-gray-500 border border-gray-200 rounded-full px-2 py-0.5">
+                  {p.category}
+                </span>
+              )}
             </div>
-          )}
-          <div className="text-sm font-medium mt-1 text-center leading-tight">{p.name}</div>
-          <div className="text-sm text-gray-500">{fmt(p.price)}</div>
+            <div className="text-sm text-gray-500 mt-1">{fmt(p.price)}</div>
+          </div>
         </button>
       ))}
     </div>
@@ -278,8 +300,8 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPi
       <div className="max-w-3xl mx-auto p-4 space-y-4 pb-32">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold">Kasse</h2>
-          <button onClick={onClose} className="text-gray-500 border rounded-lg px-3 py-2">
-            ← Zurück
+          <button onClick={onClose} className="text-gray-500 border rounded-lg px-3 py-2 flex items-center gap-1 hover:bg-gray-50">
+            <ArrowLeft className="w-4 h-4" /> Zurück
           </button>
         </div>
 
@@ -307,12 +329,14 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPi
                 <div className="font-medium">{e.product.name}</div>
                 <div className="text-sm text-gray-500">{fmt(e.product.price)}</div>
               </div>
-              <button onClick={() => onChangeQty(e.product.id, -1)} className="w-9 h-9 rounded-lg bg-gray-200 font-bold">
-                −
+              <button onClick={() => onChangeQty(e.product.id, -1)}
+                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
+                <Minus className="w-4 h-4" />
               </button>
               <span className="w-6 text-center font-semibold">{e.qty}</span>
-              <button onClick={() => onChangeQty(e.product.id, 1)} className="w-9 h-9 rounded-lg bg-gray-200 font-bold">
-                +
+              <button onClick={() => onChangeQty(e.product.id, 1)}
+                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
+                <Plus className="w-4 h-4" />
               </button>
             </div>
           ))}
@@ -483,8 +507,8 @@ function Row({ label, value, red, bold }) {
 // ---------------------------------------------------------------- after the sale
 function SuccessView({ sale, onDone }) {
   return (
-    <div className="bg-white rounded-2xl shadow p-6 text-center space-y-4 mt-8">
-      <div className="text-5xl">✅</div>
+    <div className="bg-white rounded-2xl shadow p-6 text-center space-y-4 mt-8 max-w-md mx-auto">
+      <CheckCircle2 className="w-14 h-14 text-primary mx-auto" />
       <h2 className="text-xl font-bold">Verkauf gebucht</h2>
       <div className="text-gray-600">
         {sale.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')} · {fmt(sale.totalAmount)}
