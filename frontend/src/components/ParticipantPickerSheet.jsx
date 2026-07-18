@@ -70,7 +70,8 @@ export default function ParticipantPickerSheet({ onSelect, onClose }) {
     }`
 
   return (
-    <div className="fixed inset-0 bg-page z-40 flex flex-col">
+    // z-50: must sit above the basket panel (z-40) when opened from inside it
+    <div className="fixed inset-0 bg-page z-50 flex flex-col">
       {/* header: search + filters, stays while the list scrolls */}
       <div className="bg-white shadow-sm p-3 space-y-2">
         <div className="flex gap-2">

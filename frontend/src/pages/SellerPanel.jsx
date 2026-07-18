@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Minus, Package, Plus, ShoppingCart, UserRound, X } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Minus, Package, Plus, Search, ShoppingCart, Trash2, UserRound, X } from 'lucide-react'
 import { api } from '../api'
 import { fmt, fromCents, toCents } from '../money'
 import ParticipantPickerSheet, { rememberRecentParticipant } from '../components/ParticipantPickerSheet'
@@ -10,10 +10,11 @@ export default function SellerPanel() {
   const [products, setProducts] = useState([])
   const [participant, setParticipant] = useState(null) // null = anonymous cash sale
   const [cart, setCart] = useState({}) // productId -> quantity
-  const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [basketOpen, setBasketOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false) // the full-screen participant picker
   const [lastSale, setLastSale] = useState(null) // success screen data
   const [categoryFilter, setCategoryFilter] = useState(null) // null = all categories
+  const [productSearch, setProductSearch] = useState('')
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -43,6 +44,14 @@ export default function SellerPanel() {
   const totalCents = cartEntries.reduce((sum, e) => sum + toCents(e.product.price) * e.qty, 0)
   const itemCount = cartEntries.reduce((sum, e) => sum + e.qty, 0)
 
+  // category tab + search box combined, so the seller can narrow a long product wall fast
+  const visibleProducts = useMemo(() => {
+    let list = categoryFilter ? products.filter((p) => p.category === categoryFilter) : products
+    const q = productSearch.trim().toLowerCase()
+    if (q) list = list.filter((p) => p.name.toLowerCase().includes(q))
+    return list
+  }, [products, categoryFilter, productSearch])
+
   function addToCart(product) {
     setCart((c) => ({ ...c, [product.id]: (c[product.id] || 0) + 1 }))
   }
@@ -68,7 +77,7 @@ export default function SellerPanel() {
     if (participant) rememberRecentParticipant(participant.id) // feeds the "Zuletzt" row
     setLastSale(sale)
     setCart({})
-    setCheckoutOpen(false)
+    setBasketOpen(false)
     refreshParticipant()
   }
 
@@ -79,38 +88,52 @@ export default function SellerPanel() {
   }
 
   return (
-    <div className="space-y-4">
+    // while the basket is open on desktop it takes the right 24rem - pad the content
+    // so the product grid stays fully visible instead of hiding behind it
+    <div className={`space-y-4 ${basketOpen ? 'md:pr-[25rem]' : ''}`}>
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
       <ParticipantBar participant={participant} onOpenPicker={() => setPickerOpen(true)} onClear={() => setParticipant(null)} />
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <input
+          value={productSearch}
+          onChange={(e) => setProductSearch(e.target.value)}
+          placeholder="Produkt suchen…"
+          className="w-full border border-gray-300 rounded-lg pl-9 pr-9 py-3 bg-white"
+        />
+        {productSearch && (
+          <button onClick={() => setProductSearch('')} title="Suche löschen"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1">
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       <CategoryTabs products={products} active={categoryFilter} onChange={setCategoryFilter} />
 
-      <ProductGrid
-        products={categoryFilter ? products.filter((p) => p.category === categoryFilter) : products}
-        cart={cart}
-        onAdd={addToCart}
-      />
+      <ProductGrid products={visibleProducts} cart={cart} onAdd={addToCart} onChangeQty={changeQty} />
 
-      {/* sticky cart bar above the bottom nav - always one tap from checkout */}
-      {itemCount > 0 && (
+      {/* opens the basket; hidden while the basket is already open */}
+      {itemCount > 0 && !basketOpen && (
         <button
-          onClick={() => setCheckoutOpen(true)}
+          onClick={() => setBasketOpen(true)}
           className="fixed bottom-20 md:bottom-6 inset-x-4 md:inset-x-auto md:right-6 md:left-auto max-w-3xl md:max-w-none mx-auto bg-primary text-white rounded-xl py-4 md:px-6 font-semibold shadow-lg z-20 flex items-center justify-center gap-2"
         >
           <ShoppingCart className="w-5 h-5" />
-          {itemCount} Artikel · {fmt(fromCents(totalCents))} · Zur Kasse
+          {itemCount} Artikel · {fmt(fromCents(totalCents))} · Warenkorb
         </button>
       )}
 
-      {checkoutOpen && (
-        <CheckoutSheet
+      {basketOpen && (
+        <BasketPanel
           cartEntries={cartEntries}
           totalCents={totalCents}
           participant={participant}
           onChangeQty={changeQty}
-          onPickParticipant={() => setPickerOpen(true)} // choose/change the person from INSIDE the Kasse
-          onClose={() => setCheckoutOpen(false)}
+          onPickParticipant={() => setPickerOpen(true)} // choose/change the person from INSIDE the basket
+          onClose={() => setBasketOpen(false)}
           onSold={handleSold}
         />
       )}
@@ -186,11 +209,11 @@ function CategoryTabs({ products, active, onChange }) {
 }
 
 // ---------------------------------------------------------------- product grid
-function ProductGrid({ products, cart, onAdd }) {
+function ProductGrid({ products, cart, onAdd, onChangeQty }) {
   if (products.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-400 text-sm">
-        Keine Produkte in dieser Kategorie.
+        Keine Produkte gefunden.
       </div>
     )
   }
@@ -198,43 +221,67 @@ function ProductGrid({ products, cart, onAdd }) {
   return (
     // 2 columns on a phone (big tap targets), up to 4 on a laptop like the previous version
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-      {products.map((p) => (
-        <button
-          key={p.id}
-          onClick={() => onAdd(p)}
-          className="relative bg-white rounded-xl shadow-sm overflow-hidden text-left hover:shadow-md active:scale-[0.98] transition"
-        >
-          {cart[p.id] > 0 && (
-            <span className="absolute top-2 right-2 z-10 bg-primary text-white text-xs rounded-full min-w-6 h-6 px-1.5 flex items-center justify-center font-bold shadow">
-              {cart[p.id]}
-            </span>
-          )}
-          <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center">
-            {p.imageUrl ? (
-              <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
-            ) : (
-              <Package className="w-8 h-8 text-gray-300" />
-            )}
-          </div>
-          <div className="p-3">
-            <div className="flex items-start justify-between gap-2">
-              <span className="font-semibold text-sm leading-tight">{p.name}</span>
-              {p.category && (
-                <span className="shrink-0 text-[10px] text-gray-500 border border-gray-200 rounded-full px-2 py-0.5">
-                  {p.category}
+      {products.map((p) => {
+        const qty = cart[p.id] || 0
+        return (
+          // a div, not a button: the quantity row below contains its own buttons and
+          // nesting buttons inside a button is invalid HTML
+          <div key={p.id}
+               className={`relative bg-white rounded-xl shadow-sm overflow-hidden transition ${
+                 qty > 0 ? 'ring-2 ring-primary' : 'hover:shadow-md'
+               }`}>
+            <button onClick={() => onAdd(p)} className="block w-full text-left active:scale-[0.98] transition">
+              {qty > 0 && (
+                <span className="absolute top-2 right-2 z-10 bg-primary text-white text-xs rounded-full min-w-6 h-6 px-1.5 flex items-center justify-center font-bold shadow">
+                  {qty}
                 </span>
               )}
-            </div>
-            <div className="text-sm text-gray-500 mt-1">{fmt(p.price)}</div>
+              <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center">
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Package className="w-8 h-8 text-gray-300" />
+                )}
+              </div>
+              <div className="p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-sm leading-tight">{p.name}</span>
+                  {p.category && (
+                    <span className="shrink-0 text-[10px] text-gray-500 border border-gray-200 rounded-full px-2 py-0.5">
+                      {p.category}
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-gray-500 mt-1">{fmt(p.price)}</div>
+              </div>
+            </button>
+
+            {/* correct a mis-tap right here, without opening the basket first */}
+            {qty > 0 && (
+              <div className="flex items-center justify-between border-t border-gray-100 bg-primary/5 px-2 py-1.5">
+                <button onClick={() => onChangeQty(p.id, -1)}
+                        title={qty === 1 ? 'Entfernen' : 'Weniger'}
+                        className="w-9 h-9 rounded-lg bg-white border flex items-center justify-center hover:bg-gray-50">
+                  {qty === 1 ? <Trash2 className="w-4 h-4 text-accent" /> : <Minus className="w-4 h-4" />}
+                </button>
+                <span className="font-semibold text-sm">{qty}</span>
+                <button onClick={() => onChangeQty(p.id, 1)} title="Mehr"
+                        className="w-9 h-9 rounded-lg bg-white border flex items-center justify-center hover:bg-gray-50">
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
-        </button>
-      ))}
+        )
+      })}
     </div>
   )
 }
 
-// ---------------------------------------------------------------- checkout
-function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold }) {
+// ---------------------------------------------------------------- basket / checkout
+// Docked rather than full-screen so the product grid stays visible and reachable:
+// a right-hand panel on a laptop, a bottom sheet on a phone.
+function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold }) {
   const [cashInput, setCashInput] = useState('') // what the buyer hands over, as typed
   // The seller must ACTIVELY choose one method - no default. Each method is a single, clear
   // intent, so cash and balance can never silently fight each other (the old bug).
@@ -295,16 +342,26 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPi
   }
 
   return (
-    // full-screen sheet over everything - checkout deserves full attention
-    <div className="fixed inset-0 bg-white z-30 overflow-y-auto">
-      <div className="max-w-3xl mx-auto p-4 space-y-4 pb-32">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">Kasse</h2>
-          <button onClick={onClose} className="text-gray-500 border rounded-lg px-3 py-2 flex items-center gap-1 hover:bg-gray-50">
-            <ArrowLeft className="w-4 h-4" /> Zurück
-          </button>
-        </div>
+    // phone: bottom sheet leaving the products visible above.
+    // laptop (md+): fixed right-hand column next to the grid.
+    // phone: bottom sheet over the tab bar (z-40), so the confirm button isn't hidden by it
+    <div className="fixed z-40 bg-white flex flex-col
+                    inset-x-0 bottom-0 h-[72vh] rounded-t-2xl shadow-2xl
+                    md:inset-x-auto md:top-14 md:right-0 md:bottom-0 md:h-auto md:w-[25rem]
+                    md:rounded-none md:border-l md:border-gray-200 md:shadow-xl">
+      {/* header stays put while the contents scroll */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+        <h2 className="text-lg font-bold flex items-center gap-2">
+          <ShoppingCart className="w-5 h-5 text-primary" /> Warenkorb
+        </h2>
+        <button onClick={onClose} title="Schließen"
+                className="text-gray-500 border rounded-lg px-3 py-2 flex items-center gap-1 hover:bg-gray-50">
+          <ArrowLeft className="w-4 h-4 md:hidden" />
+          <X className="w-4 h-4 hidden md:block" />
+        </button>
+      </div>
 
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* who is buying - tappable, so the person can be assigned as the LAST step too */}
         <button onClick={onPickParticipant}
                 className="w-full bg-gray-50 rounded-xl p-3 flex items-center justify-between text-left">
@@ -456,11 +513,12 @@ function CheckoutSheet({ cartEntries, totalCents, participant, onChangeQty, onPi
         {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
       </div>
 
-      <div className="fixed bottom-0 inset-x-0 bg-white border-t p-4">
+      {/* confirm stays pinned to the bottom of the panel, always reachable */}
+      <div className="border-t border-gray-100 p-4 shrink-0">
         <button
           onClick={confirm}
           disabled={!canConfirm}
-          className="w-full max-w-3xl mx-auto block bg-primary text-white rounded-xl py-4 font-semibold text-lg disabled:opacity-40"
+          className="w-full bg-primary text-white rounded-xl py-4 font-semibold disabled:opacity-40"
         >
           {busy ? 'Wird gebucht…' : `Verkauf bestätigen · ${fmt(fromCents(totalCents))}`}
         </button>
