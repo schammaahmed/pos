@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Search, Wallet } from 'lucide-react'
+import { Search, TrendingDown, UserRound, Users, Wallet } from 'lucide-react'
 import { api } from '../api'
 import { useAuth, isLead } from '../auth'
 import { fmt } from '../money'
+import { AmountDialog, ConfirmDialog } from '../components/Dialog'
+import { Badge, EmptyState, StatCard, ViewToggle } from '../components/ui'
+
+const VIEW_KEY = 'pos_participants_view'
 
 // Participant list with balance, history, deposit and (for leads) debt settlement.
 export default function Participants() {
@@ -10,8 +14,14 @@ export default function Participants() {
   const [participants, setParticipants] = useState([])
   const [search, setSearch] = useState('')
   const [openId, setOpenId] = useState(null) // which row is expanded
+  const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list')
   const [error, setError] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
+
+  function changeView(next) {
+    setView(next)
+    localStorage.setItem(VIEW_KEY, next)
+  }
 
   async function reload() {
     try {
@@ -42,8 +52,9 @@ export default function Participants() {
             className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-3"
           />
         </div>
+        <ViewToggle view={view} onChange={changeView} />
         {isLead(user) && (
-          <button onClick={() => setShowCreate(true)} className="bg-primary text-white rounded-lg px-4 font-semibold">
+          <button onClick={() => setShowCreate(true)} className="bg-primary text-white rounded-lg px-4 font-semibold shrink-0">
             + Neu
           </button>
         )}
@@ -51,27 +62,72 @@ export default function Participants() {
 
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
-      {openDebts.length > 0 && (
-        <div className="text-sm text-gray-500">
-          {/* debts are stored as negative balances - show the total owed as a positive amount */}
-          {openDebts.length} Teilnehmer mit offenen Schulden (
-          {fmt(Math.abs(openDebts.reduce((sum, p) => sum + Number(p.balance), 0)))})
+      {/* summary strip: the three numbers a lead actually wants at a glance */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <StatCard label="Teilnehmer" value={participants.length} icon={Users} />
+        <StatCard
+          label="Offene Schulden"
+          // debts are stored as negative balances - show the total owed as a positive amount
+          value={fmt(Math.abs(openDebts.reduce((sum, p) => sum + Number(p.balance), 0)))}
+          tone={openDebts.length ? 'debt' : 'default'}
+          icon={TrendingDown}
+        />
+        <StatCard
+          label="Guthaben gesamt"
+          value={fmt(participants.filter((p) => !p.inDebt).reduce((sum, p) => sum + Number(p.balance), 0))}
+          tone="good"
+          icon={Wallet}
+        />
+      </div>
+
+      {participants.length === 0 ? (
+        <EmptyState icon={UserRound}>Keine Teilnehmer gefunden.</EmptyState>
+      ) : view === 'grid' ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {participants.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setOpenId(openId === p.id ? null : p.id)}
+              className={`bg-white rounded-xl shadow-sm p-4 text-left hover:shadow-md transition ${
+                openId === p.id ? 'ring-2 ring-primary' : ''
+              }`}
+            >
+              <div className="font-semibold leading-tight truncate">
+                {p.firstName} {p.lastName}
+              </div>
+              <div className={`text-sm mt-1 ${p.inDebt ? 'text-accent font-semibold' : 'text-primary'}`}>
+                {p.inDebt ? `Schulden ${fmt(Math.abs(Number(p.balance)))}` : fmt(p.balance)}
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm divide-y overflow-hidden">
+          {participants.map((p) => (
+            <ParticipantRow
+              key={p.id}
+              participant={p}
+              open={openId === p.id}
+              onToggle={() => setOpenId(openId === p.id ? null : p.id)}
+              canSettle={isLead(user)}
+              onChanged={reload}
+            />
+          ))}
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm divide-y">
-        {participants.map((p) => (
+      {/* in grid view the details still need somewhere to live */}
+      {view === 'grid' && openId && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <ParticipantRow
-            key={p.id}
-            participant={p}
-            open={openId === p.id}
-            onToggle={() => setOpenId(openId === p.id ? null : p.id)}
+            participant={participants.find((p) => p.id === openId)}
+            open
+            onToggle={() => setOpenId(null)}
             canSettle={isLead(user)}
             onChanged={reload}
           />
-        ))}
-        {participants.length === 0 && <div className="p-4 text-gray-400 text-sm">Keine Teilnehmer gefunden.</div>}
-      </div>
+        </div>
+      )}
 
       {showCreate && <CreateParticipantForm onClose={() => setShowCreate(false)} onCreated={reload} />}
     </div>
@@ -82,6 +138,7 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
   const [history, setHistory] = useState(null)
   const [sales, setSales] = useState(null)
   const [error, setError] = useState(null)
+  const [dialog, setDialog] = useState(null) // 'deposit' | 'settle' | null
 
   // load the details only when the row is opened - not for all 80 participants upfront
   useEffect(() => {
@@ -90,22 +147,14 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
     api(`/api/sales?participantId=${participant.id}`).then(setSales).catch(() => setSales([]))
   }, [open, participant.id])
 
-  async function deposit() {
-    const input = window.prompt('Betrag einzahlen (€):')
-    if (!input) return
-    try {
-      await api(`/api/participants/${participant.id}/deposit`, {
-        method: 'POST',
-        body: { amount: Number(input.replace(',', '.')) },
-      })
-      onChanged()
-    } catch (e) {
-      setError(e.message)
-    }
+  async function deposit(amount) {
+    setError(null)
+    await api(`/api/participants/${participant.id}/deposit`, { method: 'POST', body: { amount } })
+    onChanged()
   }
 
   async function settleDebt() {
-    if (!window.confirm(`Schulden von ${fmt(participant.balance)} als bezahlt markieren?`)) return
+    setError(null)
     try {
       await api(`/api/participants/${participant.id}/settle-debt`, { method: 'POST' })
       onChanged()
@@ -114,14 +163,19 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
     }
   }
 
+  const debt = Math.abs(Number(participant.balance))
+
   return (
     <div>
-      <button onClick={onToggle} className="w-full flex justify-between items-center p-4">
-        <span className="font-medium">
+      <button onClick={onToggle} className="w-full flex justify-between items-center gap-3 p-4 hover:bg-gray-50 text-left">
+        <span className="font-medium truncate">
           {participant.firstName} {participant.lastName}
         </span>
-        <span className={participant.inDebt ? 'text-accent font-semibold' : 'text-primary'}>
-          {fmt(participant.balance)}
+        <span className="flex items-center gap-2 shrink-0">
+          {participant.inDebt && <Badge tone="accent">Schulden</Badge>}
+          <span className={participant.inDebt ? 'text-accent font-semibold' : 'text-primary'}>
+            {participant.inDebt ? fmt(debt) : fmt(participant.balance)}
+          </span>
         </span>
       </button>
 
@@ -130,16 +184,37 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
           {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-2">{error}</div>}
 
           <div className="flex gap-2">
-            <button onClick={deposit}
+            <button onClick={() => setDialog('deposit')}
                     className="flex-1 bg-primary text-white rounded-lg py-2 text-sm font-semibold flex items-center justify-center gap-1.5">
               <Wallet className="w-4 h-4" /> Einzahlen
             </button>
             {canSettle && participant.inDebt && (
-              <button onClick={settleDebt} className="flex-1 bg-accent text-white rounded-lg py-2 text-sm font-semibold">
-                Schulden beglichen
+              <button onClick={() => setDialog('settle')}
+                      className="flex-1 border border-accent text-accent rounded-lg py-2 text-sm font-semibold hover:bg-accent/5">
+                Schulden begleichen
               </button>
             )}
           </div>
+
+          {dialog === 'deposit' && (
+            <AmountDialog
+              title={`Einzahlen für ${participant.firstName} ${participant.lastName}`}
+              label="Betrag, den die Person übergibt"
+              confirmLabel="Einzahlen"
+              onSubmit={deposit}
+              onClose={() => setDialog(null)}
+            />
+          )}
+          {dialog === 'settle' && (
+            <ConfirmDialog
+              title="Schulden begleichen"
+              message={`${participant.firstName} ${participant.lastName} hat ${fmt(debt)} offen. Wurde das Geld kassiert? Der Saldo wird auf 0,00 € gesetzt.`}
+              confirmLabel="Ja, bezahlt"
+              tone="danger"
+              onConfirm={settleDebt}
+              onClose={() => setDialog(null)}
+            />
+          )}
 
           {/* purchase history */}
           {sales?.length > 0 && (

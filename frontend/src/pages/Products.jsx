@@ -3,6 +3,9 @@ import { Eye, EyeOff, Package, Pencil, X } from 'lucide-react'
 import { api } from '../api'
 import { useAuth, isLead } from '../auth'
 import { fmt } from '../money'
+import { Badge, EmptyState, ViewToggle } from '../components/ui'
+
+const VIEW_KEY = 'pos_products_view'
 
 // Product management. Sellers see the list read-only; leads/admins can
 // add, edit, and activate/deactivate ("ausverkauft").
@@ -11,7 +14,13 @@ export default function Products() {
   const canEdit = isLead(user)
   const [products, setProducts] = useState([])
   const [editing, setEditing] = useState(null) // null | 'new' | product object
+  const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list')
   const [error, setError] = useState(null)
+
+  function changeView(next) {
+    setView(next)
+    localStorage.setItem(VIEW_KEY, next)
+  }
 
   async function reload() {
     try {
@@ -37,46 +46,94 @@ export default function Products() {
 
   return (
     <div className="space-y-4">
-      {canEdit && (
-        <button onClick={() => setEditing('new')} className="w-full bg-primary text-white rounded-lg py-3 font-semibold">
-          + Produkt anlegen
-        </button>
-      )}
+      <div className="flex gap-2 items-center">
+        {canEdit && (
+          <button onClick={() => setEditing('new')} className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">
+            + Produkt anlegen
+          </button>
+        )}
+        <ViewToggle view={view} onChange={changeView} />
+      </div>
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
-      <div className="bg-white rounded-xl shadow-sm divide-y">
-        {products.map((p) => (
-          <div key={p.id} className={`flex items-center gap-3 p-3 hover:bg-gray-50 ${p.active ? '' : 'opacity-50'}`}>
-            {p.imageUrl ? (
-              <img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
-            ) : (
-              <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                <Package className="w-5 h-5 text-gray-300" />
+      {products.length === 0 ? (
+        <EmptyState icon={Package}>Noch keine Produkte.</EmptyState>
+      ) : view === 'grid' ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {products.map((p) => (
+            // a deactivated product is dimmed AND outlined in red so it's obvious at a glance
+            <div key={p.id}
+                 className={`bg-white rounded-xl shadow-sm overflow-hidden ${p.active ? '' : 'opacity-60 ring-1 ring-red-300'}`}>
+              <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center">
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Package className="w-8 h-8 text-gray-300" />
+                )}
               </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="font-medium truncate">{p.name}</div>
-              <div className="text-sm text-gray-500">
-                {p.category || 'Ohne Kategorie'} · {fmt(p.price)}
-                {!p.active && ' · deaktiviert'}
+              <div className="p-3 space-y-1">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-sm leading-tight">{p.name}</span>
+                  <Badge tone={p.active ? 'green' : 'red'}>{p.active ? 'Aktiv' : 'Inaktiv'}</Badge>
+                </div>
+                <div className="text-sm text-gray-500">
+                  {p.category || 'Ohne Kategorie'} · {fmt(p.price)}
+                </div>
+                {canEdit && (
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => setEditing(p)} title="Bearbeiten"
+                            className="flex-1 border rounded-lg p-2 text-gray-600 hover:bg-gray-100 flex justify-center">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => toggleActive(p)} title={p.active ? 'Deaktivieren' : 'Aktivieren'}
+                            className="flex-1 border rounded-lg p-2 text-gray-600 hover:bg-gray-100 flex justify-center">
+                      {p.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-            {canEdit && (
-              <>
-                <button onClick={() => setEditing(p)} title="Bearbeiten"
-                        className="border rounded-lg p-2 text-gray-600 hover:bg-gray-100">
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button onClick={() => toggleActive(p)} title={p.active ? 'Deaktivieren' : 'Aktivieren'}
-                        className="border rounded-lg p-2 text-gray-600 hover:bg-gray-100">
-                  {p.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </>
-            )}
-          </div>
-        ))}
-        {products.length === 0 && <div className="p-4 text-gray-400 text-sm">Noch keine Produkte.</div>}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm divide-y overflow-hidden">
+          {products.map((p) => (
+            <div key={p.id}
+                 className={`flex items-center gap-3 p-3 hover:bg-gray-50 ${p.active ? '' : 'opacity-60'}`}>
+              {/* colour strip: green = sellable, red = deactivated */}
+              <span className={`w-1.5 self-stretch rounded-full shrink-0 ${p.active ? 'bg-green-500' : 'bg-red-400'}`} />
+              {p.imageUrl ? (
+                <img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
+              ) : (
+                <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                  <Package className="w-5 h-5 text-gray-300" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate flex items-center gap-2">
+                  {p.name}
+                  <Badge tone={p.active ? 'green' : 'red'}>{p.active ? 'Aktiv' : 'Inaktiv'}</Badge>
+                </div>
+                <div className="text-sm text-gray-500">
+                  {p.category || 'Ohne Kategorie'} · {fmt(p.price)}
+                </div>
+              </div>
+              {canEdit && (
+                <>
+                  <button onClick={() => setEditing(p)} title="Bearbeiten"
+                          className="border rounded-lg p-2 text-gray-600 hover:bg-gray-100">
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => toggleActive(p)} title={p.active ? 'Deaktivieren' : 'Aktivieren'}
+                          className="border rounded-lg p-2 text-gray-600 hover:bg-gray-100">
+                    {p.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {editing && (
         <ProductForm

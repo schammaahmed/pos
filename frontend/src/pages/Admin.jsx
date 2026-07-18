@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Lightbulb } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
+import { ConfirmDialog } from '../components/Dialog'
 
 // Admin area. CAMP_ADMIN: manage their camp's team. SUPER_ADMIN: additionally manage camps.
 export default function Admin() {
@@ -12,6 +13,7 @@ export default function Admin() {
   const [error, setError] = useState(null)
   const [showCampForm, setShowCampForm] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
+  const [campToClose, setCampToClose] = useState(null) // camp awaiting the close confirmation
 
   async function reload() {
     try {
@@ -36,7 +38,6 @@ export default function Admin() {
   }
 
   async function closeCamp(camp) {
-    if (!window.confirm(`Camp „${camp.name}" wirklich abschließen? Danach kann nicht mehr verkauft werden.`)) return
     try {
       await api(`/api/camps/${camp.id}/close`, { method: 'POST' })
       reload()
@@ -69,7 +70,7 @@ export default function Admin() {
                 </div>
               </div>
               {isSuper && c.status === 'ACTIVE' && (
-                <button onClick={() => closeCamp(c)} className="text-sm border rounded-lg px-3 py-2 text-accent">
+                <button onClick={() => setCampToClose(c)} className="text-sm border rounded-lg px-3 py-2 text-accent hover:bg-accent/5">
                   Abschließen
                 </button>
               )}
@@ -109,6 +110,17 @@ export default function Admin() {
           ))}
         </div>
       </section>
+
+      {campToClose && (
+        <ConfirmDialog
+          title="Camp abschließen"
+          message={`„${campToClose.name}" wirklich abschließen? Danach kann in diesem Camp nicht mehr verkauft werden.`}
+          confirmLabel="Abschließen"
+          tone="danger"
+          onConfirm={() => closeCamp(campToClose)}
+          onClose={() => setCampToClose(null)}
+        />
+      )}
 
       {showCampForm && <CampForm onClose={() => setShowCampForm(false)} onSaved={reload} />}
       {showUserForm && (
