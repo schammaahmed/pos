@@ -1,19 +1,29 @@
-import { useEffect, useState } from 'react'
-import { Lightbulb } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Crown, Euro, Lightbulb, Package, Receipt, TrendingDown, Trophy, UserRound, Users,
+} from 'lucide-react'
 import { api } from '../api'
 import { useAuth, roleLabel } from '../auth'
 import { ConfirmDialog } from '../components/Dialog'
+import { Avatar, Badge, EmptyState, SectionHeader, StatCard } from '../components/ui'
+import { fmt } from '../money'
 
 // Admin area. CAMP_ADMIN: manage their camp's team. SUPER_ADMIN: additionally manage camps.
+// Everything on the dashboard is derived from the existing endpoints - no extra API needed.
 export default function Admin() {
   const { user } = useAuth()
   const isSuper = user.role === 'SUPER_ADMIN'
   const [camps, setCamps] = useState([])
   const [users, setUsers] = useState([])
+  const [sales, setSales] = useState([])
+  const [participants, setParticipants] = useState([])
   const [error, setError] = useState(null)
   const [showCampForm, setShowCampForm] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
   const [campToClose, setCampToClose] = useState(null) // camp awaiting the close confirmation
+  // which camp the figures refer to. A camp admin only ever has their own; a super
+  // admin has none of their own, so they pick one (defaults to the first active camp).
+  const [statsCampId, setStatsCampId] = useState(user.campId ?? null)
 
   async function reload() {
     try {
@@ -27,6 +37,63 @@ export default function Admin() {
   useEffect(() => {
     reload()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // super admin: once camps are loaded, default the dashboard to an active camp
+  useEffect(() => {
+    if (statsCampId || camps.length === 0) return
+    setStatsCampId((camps.find((c) => c.status === 'ACTIVE') ?? camps[0]).id)
+  }, [camps, statsCampId])
+
+  // load the figures for the selected camp
+  useEffect(() => {
+    if (!statsCampId) return
+    const q = `?campId=${statsCampId}`
+    api(`/api/sales${q}`).then(setSales).catch(() => setSales([]))
+    api(`/api/participants${q}`).then(setParticipants).catch(() => setParticipants([]))
+  }, [statsCampId])
+
+  // ---- everything below is computed from the loaded lists -------------------
+  const stats = useMemo(() => {
+    const booked = sales.filter((s) => s.status === 'COMPLETED')
+    const today = new Date().toDateString()
+    const revenue = (list) => list.reduce((sum, s) => sum + Number(s.totalAmount), 0)
+    const bookedToday = booked.filter((s) => new Date(s.createdAt).toDateString() === today)
+
+    // how many of each product went over the counter
+    const perProduct = new Map()
+    for (const sale of booked) {
+      for (const item of sale.items) {
+        perProduct.set(item.productName, (perProduct.get(item.productName) ?? 0) + item.quantity)
+      }
+    }
+    const topProducts = [...perProduct.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+
+    // who spent the most (named participants only - anonymous cash sales have no name)
+    const perBuyer = new Map()
+    for (const sale of booked) {
+      if (!sale.participantName) continue
+      perBuyer.set(sale.participantName, (perBuyer.get(sale.participantName) ?? 0) + Number(sale.totalAmount))
+    }
+    const topBuyers = [...perBuyer.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+
+    const debtors = participants.filter((p) => p.inDebt)
+
+    return {
+      revenueToday: revenue(bookedToday),
+      revenueTotal: revenue(booked),
+      salesToday: bookedToday.length,
+      salesTotal: booked.length,
+      reversed: sales.filter((s) => s.status === 'REVERSED').length,
+      flagged: sales.filter((s) => s.flaggedForReview).length,
+      participants: participants.length,
+      openDebt: Math.abs(debtors.reduce((sum, p) => sum + Number(p.balance), 0)),
+      debtors: debtors.length,
+      activeTeam: users.filter((u) => u.active).length,
+      topProducts,
+      topBuyers,
+      recent: booked.slice(0, 6), // API already returns newest first
+    }
+  }, [sales, participants, users])
 
   async function toggleUser(u) {
     try {
@@ -46,9 +113,117 @@ export default function Admin() {
     }
   }
 
+  const statsCamp = camps.find((c) => c.id === statsCampId)
+
   return (
     <div className="space-y-6">
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+
+      {/* ---------------------------------------------------------- overview */}
+      <section>
+        <SectionHeader title="Überblick" hint={statsCamp ? statsCamp.name : 'Kein Camp ausgewählt'}>
+          {/* a super admin belongs to no camp, so they choose which one the figures show */}
+          {isSuper && camps.length > 0 && (
+            <select
+              value={statsCampId ?? ''}
+              onChange={(e) => setStatsCampId(Number(e.target.value))}
+              className="border rounded-lg px-3 py-2 text-sm bg-white"
+            >
+              {camps.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+        </SectionHeader>
+
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <StatCard label="Umsatz heute" value={fmt(stats.revenueToday)} hint={`${stats.salesToday} Verkäufe`} tone="primary" icon={Euro} />
+          <StatCard label="Umsatz gesamt" value={fmt(stats.revenueTotal)} hint={`${stats.salesTotal} Verkäufe`} tone="success" icon={Receipt} />
+          <StatCard label="Teilnehmer" value={stats.participants} tone="info" icon={Users} />
+          <StatCard
+            label="Offene Schulden"
+            value={fmt(stats.openDebt)}
+            hint={stats.debtors ? `${stats.debtors} Teilnehmer` : 'niemand im Minus'}
+            tone={stats.debtors ? 'accent' : 'neutral'}
+            icon={TrendingDown}
+          />
+          <StatCard label="Team aktiv" value={stats.activeTeam} hint={`${users.length} gesamt`} tone="neutral" icon={UserRound} />
+          <StatCard
+            label="Storniert"
+            value={stats.reversed}
+            hint={stats.flagged ? `${stats.flagged} zu prüfen` : 'nichts offen'}
+            tone={stats.flagged ? 'warning' : 'neutral'}
+            icon={Package}
+          />
+        </div>
+      </section>
+
+      {/* -------------------------------------------- recent sales + rankings */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        <section className="lg:col-span-2">
+          <SectionHeader title="Letzte Verkäufe" hint="Wer hat was an wen verkauft" />
+          <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+            {stats.recent.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 p-3">
+                <Avatar name={s.participantName || 'Barverkauf'} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate">{s.participantName || 'Barverkauf'}</div>
+                  <div className="text-xs text-gray-500 truncate">
+                    {s.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-semibold">{fmt(s.totalAmount)}</div>
+                  <div className="text-[11px] text-gray-400">
+                    {new Date(s.createdAt).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })} · {s.sellerName}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {stats.recent.length === 0 && (
+              <div className="p-6 text-center text-gray-400 text-sm">Noch keine Verkäufe in diesem Camp.</div>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          <div>
+            <SectionHeader title="Bestseller" hint="Meistverkaufte Produkte" />
+            <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+              {stats.topProducts.map(([name, qty], index) => (
+                <div key={name} className="flex items-center gap-3 p-3">
+                  <span className="w-6 h-6 rounded-lg bg-primary-soft text-primary text-xs font-bold flex items-center justify-center shrink-0">
+                    {index + 1}
+                  </span>
+                  <span className="flex-1 truncate text-sm font-medium">{name}</span>
+                  <Badge tone="primary">{qty}×</Badge>
+                </div>
+              ))}
+              {stats.topProducts.length === 0 && (
+                <div className="p-6 text-center text-gray-400 text-sm">Noch nichts verkauft.</div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <SectionHeader title="Top-Käufer" hint="Wer am meisten ausgibt" />
+            <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+              {stats.topBuyers.map(([name, total], index) => (
+                <div key={name} className="flex items-center gap-3 p-3">
+                  {index === 0
+                    ? <Crown className="w-5 h-5 text-warning shrink-0" />
+                    : <Trophy className="w-4 h-4 text-gray-300 shrink-0" />}
+                  <span className="flex-1 truncate text-sm font-medium">{name}</span>
+                  <span className="text-sm font-semibold">{fmt(total)}</span>
+                </div>
+              ))}
+              {stats.topBuyers.length === 0 && (
+                <div className="p-6 text-center text-gray-400 text-sm">Noch keine Käufe auf Namen.</div>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
 
       {/* camps - super admin manages, camp admin just sees their own */}
       <section className="space-y-2">
@@ -60,23 +235,29 @@ export default function Admin() {
             </button>
           )}
         </div>
-        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
           {camps.map((c) => (
-            <div key={c.id} className="p-3 flex justify-between items-center">
-              <div>
-                <div className="font-medium">{c.name}</div>
-                <div className="text-sm text-gray-500">
-                  {c.city} · {c.startDate} bis {c.endDate} · {c.status === 'ACTIVE' ? 'aktiv' : 'abgeschlossen'}
+            <div key={c.id} className="p-3 flex justify-between items-center gap-3 hover:bg-gray-50">
+              <div className="min-w-0">
+                <div className="font-medium flex items-center gap-2">
+                  <span className="truncate">{c.name}</span>
+                  <Badge tone={c.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                    {c.status === 'ACTIVE' ? 'aktiv' : 'abgeschlossen'}
+                  </Badge>
+                </div>
+                <div className="text-sm text-gray-500 truncate">
+                  {c.city} · {c.startDate} bis {c.endDate}
                 </div>
               </div>
               {isSuper && c.status === 'ACTIVE' && (
-                <button onClick={() => setCampToClose(c)} className="text-sm border rounded-lg px-3 py-2 text-accent hover:bg-accent/5">
+                <button onClick={() => setCampToClose(c)}
+                        className="text-sm border rounded-lg px-3 py-2 text-accent hover:bg-accent-soft shrink-0">
                   Abschließen
                 </button>
               )}
             </div>
           ))}
-          {camps.length === 0 && <div className="p-4 text-gray-400 text-sm">Noch keine Camps.</div>}
+          {camps.length === 0 && <EmptyState icon={Package}>Noch keine Camps.</EmptyState>}
         </div>
       </section>
 
@@ -88,21 +269,23 @@ export default function Admin() {
             + Benutzer
           </button>
         </div>
-        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
           {users.map((u) => (
-            <div key={u.id} className={`p-3 flex justify-between items-center ${u.active ? '' : 'opacity-50'}`}>
-              <div>
-                <div className="font-medium">
-                  {u.firstName} {u.lastName}
+            <div key={u.id} className={`p-3 flex items-center gap-3 hover:bg-gray-50 ${u.active ? '' : 'opacity-60'}`}>
+              <Avatar name={`${u.firstName} ${u.lastName}`} size="sm" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium flex items-center gap-2">
+                  <span className="truncate">{u.firstName} {u.lastName}</span>
+                  {u.id === user.id && <Badge tone="info">Du</Badge>}
+                  {!u.active && <Badge tone="accent">deaktiviert</Badge>}
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-gray-500 truncate">
                   {roleLabel(u.role)}
                   {u.campName ? ` · ${u.campName}` : ''}
-                  {!u.active && ' · deaktiviert'}
                 </div>
               </div>
               {u.id !== user.id && (
-                <button onClick={() => toggleUser(u)} className="text-sm border rounded-lg px-3 py-2">
+                <button onClick={() => toggleUser(u)} className="text-sm border rounded-lg px-3 py-2 hover:bg-gray-100 shrink-0">
                   {u.active ? 'Deaktivieren' : 'Aktivieren'}
                 </button>
               )}
