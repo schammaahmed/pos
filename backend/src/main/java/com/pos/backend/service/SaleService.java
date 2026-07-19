@@ -4,6 +4,8 @@ import com.pos.backend.dto.SaleDtos.CheckoutItem;
 import com.pos.backend.dto.SaleDtos.CheckoutRequest;
 import com.pos.backend.dto.SaleDtos.SaleResponse;
 import com.pos.backend.entity.*;
+import com.pos.backend.entity.AuditLog.Action;
+import com.pos.backend.entity.AuditLog.EntityType;
 import com.pos.backend.repository.ParticipantRepository;
 import com.pos.backend.repository.ProductRepository;
 import com.pos.backend.repository.SaleRepository;
@@ -27,6 +29,7 @@ public class SaleService {
     private final ParticipantRepository participantRepository;
     private final ProductRepository productRepository;
     private final CampAccess campAccess;
+    private final AuditService auditService;
     private final TransactionTemplate transactionTemplate;
 
     // Retry wrapper around the actual checkout. If two sellers charge the SAME participant at the
@@ -118,6 +121,16 @@ public class SaleService {
         }
 
         sale = saleRepository.save(sale); // cascade saves the items too
+
+        auditService.record(currentUser, camp, EntityType.SALE, sale.getId(),
+                participant != null
+                        ? participant.getFirstName() + " " + participant.getLastName()
+                        : "Barverkauf",
+                Action.SOLD,
+                sale.getItems().stream()
+                        .map(i -> i.getQuantity() + "x " + i.getProduct().getName())
+                        .reduce((a, b) -> a + ", " + b).orElse("") + " = " + total + " €");
+
         return SaleResponse.from(sale,
                 PaymentSplit.changeToReturn(total, request.cashGiven(), request.keepChangeAsCredit()));
     }
@@ -162,8 +175,11 @@ public class SaleService {
         // the concern has been dealt with by the reversal itself, so it leaves the queue
         sale.setFlaggedForReview(false);
         sale.setReviewedBy(currentUser);
+        Sale saved = saleRepository.save(sale);
 
-        return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
+        auditService.record(currentUser, sale.getCamp(), EntityType.SALE, sale.getId(),
+                saleLabel(sale), Action.REVERSED, "Storniert über " + sale.getTotalAmount() + " €");
+        return SaleResponse.from(saved, BigDecimal.ZERO);
     }
 
     // Mark a sale for the lead to look at, WITHOUT undoing it. Until now the only way
@@ -181,7 +197,11 @@ public class SaleService {
         sale.setFlaggedForReview(true);
         sale.setFlaggedBy(currentUser);   // so the lead can ask the right person about it
         sale.setFlaggedAt(LocalDateTime.now());
-        return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
+        Sale saved = saleRepository.save(sale);
+
+        auditService.record(currentUser, sale.getCamp(), EntityType.SALE, sale.getId(),
+                saleLabel(sale), Action.FLAGGED, "Zur Prüfung markiert");
+        return SaleResponse.from(saved, BigDecimal.ZERO);
     }
 
     // the lead ticks off a flagged sale after checking it was legitimate
@@ -196,7 +216,18 @@ public class SaleService {
         }
         sale.setFlaggedForReview(false);
         sale.setReviewedBy(currentUser);
-        return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
+        Sale reviewed = saleRepository.save(sale);
+
+        auditService.record(currentUser, sale.getCamp(), EntityType.SALE, sale.getId(),
+                saleLabel(sale), Action.REVIEWED, "Geprüft und freigegeben");
+        return SaleResponse.from(reviewed, BigDecimal.ZERO);
+    }
+
+    /** What to call a sale in the log - the buyer, or the fact that it was a cash sale. */
+    private static String saleLabel(Sale sale) {
+        return sale.getParticipant() != null
+                ? sale.getParticipant().getFirstName() + " " + sale.getParticipant().getLastName()
+                : "Barverkauf";
     }
 
     public List<SaleResponse> list(User currentUser, Long campId, Long participantId) {

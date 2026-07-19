@@ -1,13 +1,39 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Banknote, Flag, Mail, RotateCcw, ShieldCheck, X } from 'lucide-react'
+import { api } from '../api'
 import { roleLabel } from '../auth'
 import { fmt } from '../money'
 import { Avatar, Badge } from './ui'
+
+// German labels for the audit actions, so the trail reads like a sentence
+const ACTION_LABEL = {
+  CREATED: 'angelegt', UPDATED: 'geändert', DELETED: 'gelöscht',
+  ACTIVATED: 'aktiviert', DEACTIVATED: 'deaktiviert',
+  DEPOSIT: 'Einzahlung', DEBT_SETTLED: 'Schulden beglichen',
+  SOLD: 'verkauft', FLAGGED: 'zur Prüfung', REVERSED: 'storniert',
+  REVIEWED: 'geprüft', IMPORTED: 'importiert',
+}
+const ACTION_TONE = {
+  CREATED: 'success', UPDATED: 'info', DELETED: 'accent',
+  DEACTIVATED: 'warning', ACTIVATED: 'success',
+  DEPOSIT: 'success', DEBT_SETTLED: 'primary',
+  SOLD: 'primary', FLAGGED: 'warning', REVERSED: 'accent', REVIEWED: 'success',
+}
 
 // Everything one team member did: what they sold, what they reversed and what is
 // flagged on them. Accountability is the point - a shared stand needs to be able
 // to answer "who booked this?" without digging through the whole log.
 export default function TeamMemberDialog({ member, sales, onClose }) {
+  const [tab, setTab] = useState(0)      // 0 = everything they did, 1 = only sales
+  const [audit, setAudit] = useState(null)
+
+  // everything this person touched, not just their sales
+  useEffect(() => {
+    api(`/api/audit?actorId=${member.id}&limit=200`)
+      .then(setAudit)
+      .catch(() => setAudit([]))
+  }, [member.id])
+
   const mine = useMemo(
     () => sales.filter((s) => s.sellerId === member.id),
     [sales, member.id],
@@ -77,30 +103,65 @@ export default function TeamMemberDialog({ member, sales, onClose }) {
           </div>
         )}
 
-        <div className="overflow-y-auto border-t border-gray-100">
-          <div className="px-4 py-2 text-xs font-semibold text-gray-400 sticky top-0 bg-white">AKTIVITÄT</div>
-          {mine.length === 0 && (
-            <div className="p-6 text-center text-gray-400 text-sm">Diese Person hat noch nichts gebucht.</div>
-          )}
-          <div className="divide-y divide-gray-100">
-            {mine.map((s) => (
-              <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
-                {s.status === 'REVERSED'
-                  ? <RotateCcw className="w-4 h-4 text-accent shrink-0" />
-                  : <Banknote className="w-4 h-4 text-gray-300 shrink-0" />}
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm truncate ${s.status === 'REVERSED' ? 'line-through text-gray-400' : ''}`}>
-                    {s.participantName ?? 'Barverkauf'} · {s.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')}
+        {/* Sales are only part of the story - the audit trail also has price changes,
+            image swaps, deposits and everything else this person touched. */}
+        <div className="flex gap-1 px-4 pt-1 shrink-0">
+          {['Alles', 'Verkäufe'].map((t, i) => (
+            <button key={t} onClick={() => setTab(i)}
+                    className={`px-3 py-1.5 text-sm rounded-lg ${tab === i ? 'bg-primary-soft text-primary font-semibold' : 'text-gray-500'}`}>
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-y-auto border-t border-gray-100 mt-1">
+          {tab === 1 ? (
+            <>
+              {mine.length === 0 && (
+                <div className="p-6 text-center text-gray-400 text-sm">Diese Person hat noch nichts gebucht.</div>
+              )}
+              <div className="divide-y divide-gray-100">
+                {mine.map((s) => (
+                  <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
+                    {s.status === 'REVERSED'
+                      ? <RotateCcw className="w-4 h-4 text-accent shrink-0" />
+                      : <Banknote className="w-4 h-4 text-gray-300 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm truncate ${s.status === 'REVERSED' ? 'line-through text-gray-400' : ''}`}>
+                        {s.participantName ?? 'Barverkauf'} · {s.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')}
+                      </div>
+                      <div className="text-[11px] text-gray-400">
+                        {new Date(s.createdAt).toLocaleString('de-AT')}
+                        {s.flaggedForReview && ' · zu prüfen'}
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold shrink-0">{fmt(s.totalAmount)}</span>
                   </div>
-                  <div className="text-[11px] text-gray-400">
-                    {new Date(s.createdAt).toLocaleString('de-AT')}
-                    {s.flaggedForReview && ' · zu prüfen'}
-                  </div>
-                </div>
-                <span className="text-sm font-semibold shrink-0">{fmt(s.totalAmount)}</span>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <>
+              {audit === null && <div className="p-6 text-center text-gray-400 text-sm">Wird geladen…</div>}
+              {audit?.length === 0 && (
+                <div className="p-6 text-center text-gray-400 text-sm">Noch keine Aktivität aufgezeichnet.</div>
+              )}
+              <div className="divide-y divide-gray-100">
+                {audit?.map((e) => (
+                  <div key={e.id} className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <Badge tone={ACTION_TONE[e.action] ?? 'neutral'}>{ACTION_LABEL[e.action] ?? e.action}</Badge>
+                      <span className="text-sm font-medium truncate">{e.entityLabel}</span>
+                      <span className="text-[11px] text-gray-400 ml-auto shrink-0">
+                        {new Date(e.createdAt).toLocaleString('de-AT')}
+                      </span>
+                    </div>
+                    {e.changes && <div className="text-xs text-gray-500 mt-0.5 break-words">{e.changes}</div>}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
