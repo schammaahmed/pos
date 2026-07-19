@@ -64,18 +64,19 @@ export default function Participants() {
 
       {/* summary strip: the three numbers a lead actually wants at a glance */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <StatCard label="Teilnehmer" value={participants.length} icon={Users} />
+        <StatCard label="Teilnehmer" value={participants.length} tone="info" icon={Users} />
         <StatCard
           label="Offene Schulden"
           // debts are stored as negative balances - show the total owed as a positive amount
           value={fmt(Math.abs(openDebts.reduce((sum, p) => sum + Number(p.balance), 0)))}
-          tone={openDebts.length ? 'debt' : 'default'}
+          hint={openDebts.length ? `${openDebts.length} Teilnehmer` : 'niemand im Minus'}
+          tone={openDebts.length ? 'accent' : 'neutral'}
           icon={TrendingDown}
         />
         <StatCard
           label="Guthaben gesamt"
           value={fmt(participants.filter((p) => !p.inDebt).reduce((sum, p) => sum + Number(p.balance), 0))}
-          tone="good"
+          tone="success"
           icon={Wallet}
         />
       </div>

@@ -3,6 +3,17 @@ import { LayoutGrid, List } from 'lucide-react'
 // Small shared building blocks so every page looks like the same app instead of
 // each screen inventing its own spacing and colours.
 
+// Maps a semantic tone to the token pair defined in index.css. Written out in
+// full because Tailwind scans source text - it cannot see `bg-${tone}-soft`.
+const TONES = {
+  primary: { text: 'text-primary', tile: 'bg-primary-soft text-primary', pill: 'bg-primary-soft text-primary' },
+  success: { text: 'text-success', tile: 'bg-success-soft text-success', pill: 'bg-success-soft text-success' },
+  accent: { text: 'text-accent', tile: 'bg-accent-soft text-accent', pill: 'bg-accent-soft text-accent' },
+  warning: { text: 'text-warning', tile: 'bg-warning-soft text-warning', pill: 'bg-warning-soft text-warning' },
+  info: { text: 'text-info', tile: 'bg-info-soft text-info', pill: 'bg-info-soft text-info' },
+  neutral: { text: 'text-gray-900', tile: 'bg-gray-100 text-gray-400', pill: 'bg-gray-100 text-gray-600' },
+}
+
 // list <-> raster switch, used on Teilnehmer, Produkte and the sales log
 export function ViewToggle({ view, onChange }) {
   const btn = (active) =>
@@ -22,22 +33,23 @@ export function ViewToggle({ view, onChange }) {
   )
 }
 
-// one number in the summary strip at the top of a page
-export function StatCard({ label, value, tone = 'default', icon: Icon }) {
-  const valueTone =
-    tone === 'debt' ? 'text-accent' : tone === 'good' ? 'text-primary' : 'text-gray-900'
+// One number in the summary strip at the top of a page. The coloured tile behind
+// the icon is what makes a row of these readable at a glance.
+export function StatCard({ label, value, hint, tone = 'neutral', icon: Icon }) {
+  const t = TONES[tone] ?? TONES.neutral
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 flex items-center gap-3">
       {Icon && (
-        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-          <Icon className="w-5 h-5 text-gray-400" />
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${t.tile}`}>
+          <Icon className="w-5 h-5" />
         </div>
       )}
       <div className="min-w-0">
         {/* wraps instead of truncating - "Offene Schulden" must stay readable on a phone */}
         <div className="text-xs text-gray-500 leading-tight">{label}</div>
-        <div className={`text-lg font-bold ${valueTone}`}>{value}</div>
+        <div className={`text-lg font-bold ${tone === 'neutral' ? 'text-gray-900' : t.text}`}>{value}</div>
+        {hint && <div className="text-[11px] text-gray-400 leading-tight">{hint}</div>}
       </div>
     </div>
   )
@@ -53,13 +65,46 @@ export function EmptyState({ icon: Icon, children }) {
   )
 }
 
-// small status pill (active/inactive, sale status, ...)
-export function Badge({ tone = 'gray', children }) {
-  const tones = {
-    green: 'bg-green-100 text-green-700',
-    red: 'bg-red-100 text-red-700',
-    gray: 'bg-gray-100 text-gray-600',
-    accent: 'bg-accent/10 text-accent',
-  }
-  return <span className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${tones[tone]}`}>{children}</span>
+// small status pill (active/inactive, sale status, role, ...)
+export function Badge({ tone = 'neutral', children }) {
+  const t = TONES[tone] ?? TONES.neutral
+  return <span className={`text-[11px] font-medium rounded-full px-2 py-0.5 whitespace-nowrap ${t.pill}`}>{children}</span>
+}
+
+// Initials avatar. The reference dashboards lean on avatars to make rows of data
+// scannable; we have no photos, so colour the initials deterministically instead.
+const AVATAR_TONES = ['primary', 'success', 'info', 'accent', 'warning']
+
+export function Avatar({ name = '', size = 'md' }) {
+  const initials = name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+
+  // same name always gets the same colour, so people stay recognisable in a list
+  const sum = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+  const t = TONES[AVATAR_TONES[sum % AVATAR_TONES.length]]
+  const box = size === 'sm' ? 'w-8 h-8 text-[11px]' : 'w-10 h-10 text-xs'
+
+  return (
+    <span className={`${box} ${t.tile} rounded-full flex items-center justify-center font-bold shrink-0`}>
+      {initials || '?'}
+    </span>
+  )
+}
+
+// page section heading with an optional action on the right
+export function SectionHeader({ title, hint, children }) {
+  return (
+    <div className="flex items-end justify-between gap-3 mb-2">
+      <div>
+        <h2 className="font-bold text-lg leading-tight">{title}</h2>
+        {hint && <p className="text-xs text-gray-500">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  )
 }

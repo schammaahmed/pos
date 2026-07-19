@@ -74,7 +74,7 @@ export default function Products() {
               <div className="p-3 space-y-1">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-sm leading-tight">{p.name}</span>
-                  <Badge tone={p.active ? 'green' : 'red'}>{p.active ? 'Aktiv' : 'Inaktiv'}</Badge>
+                  <Badge tone={p.active ? 'success' : 'accent'}>{p.active ? 'Aktiv' : 'Inaktiv'}</Badge>
                 </div>
                 <div className="text-sm text-gray-500">
                   {p.category || 'Ohne Kategorie'} · {fmt(p.price)}
@@ -112,7 +112,7 @@ export default function Products() {
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate flex items-center gap-2">
                   {p.name}
-                  <Badge tone={p.active ? 'green' : 'red'}>{p.active ? 'Aktiv' : 'Inaktiv'}</Badge>
+                  <Badge tone={p.active ? 'success' : 'accent'}>{p.active ? 'Aktiv' : 'Inaktiv'}</Badge>
                 </div>
                 <div className="text-sm text-gray-500">
                   {p.category || 'Ohne Kategorie'} · {fmt(p.price)}

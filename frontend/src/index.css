@@ -1,13 +1,32 @@
 @import "tailwindcss";
 
-/* v1 color scheme, kept from the previous POS version.
-   @theme registers design tokens with Tailwind - every token automatically
-   gets utility classes: bg-primary, text-accent, border-primary-dark, ... */
+/* Design tokens. @theme registers them with Tailwind, so every token gets
+   utilities automatically: bg-primary, text-accent, bg-success-soft, ...
+
+   The scheme is built around the two v1 brand colours (teal + magenta) and
+   extends them with semantic status colours and a matching soft tint for each.
+   The soft tints are what give the UI life: coloured tiles behind icons and
+   status pills, instead of grey everywhere. */
 @theme {
-  --color-primary: #0e7d8a;      /* teal - main actions (v1 "Pay Cash") */
-  --color-primary-dark: #1d3a45; /* dark slate-teal - secondary actions (v1 "Pay Extra") */
-  --color-accent: #c81063;       /* magenta - debt / caution (v1 "Debt") */
-  --color-page: #eef2f5;         /* page background */
+  /* --- brand ---------------------------------------------------------- */
+  --color-primary: #0e7d8a;       /* teal - main actions (v1 "Pay Cash") */
+  --color-primary-dark: #1d3a45;  /* dark slate-teal - headings, secondary actions */
+  --color-primary-soft: #e1f1f2;  /* teal tint - tiles, active backgrounds */
+
+  --color-accent: #c81063;        /* magenta - debt / destructive (v1 "Debt") */
+  --color-accent-soft: #fce7f1;
+
+  /* --- semantic status ------------------------------------------------ */
+  --color-success: #0e9f6e;       /* active, paid, credit */
+  --color-success-soft: #e2f7ef;
+  --color-warning: #b45309;       /* needs attention, missing amount */
+  --color-warning-soft: #fdf2e3;
+  --color-info: #5b6ee1;          /* neutral highlight, counts */
+  --color-info-soft: #eaedfc;
+
+  /* --- surfaces ------------------------------------------------------- */
+  --color-page: #eef2f5;          /* app background */
+  --color-surface: #ffffff;       /* cards */
 }
 
 /* Tailwind v4 changed the default border colour from gray-200 to currentColor,
