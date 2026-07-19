@@ -16,6 +16,29 @@ export default function SellerPanel() {
   const [categoryFilter, setCategoryFilter] = useState(null) // null = all categories
   const [productSearch, setProductSearch] = useState('')
   const [error, setError] = useState(null)
+  // How big the basket is. The seller drags it: height (vh) as a bottom sheet on a
+  // phone, width (px) as a side panel on a laptop. Remembered per device.
+  const [sheetVh, setSheetVh] = useState(() => Number(localStorage.getItem('pos_basket_vh')) || 60)
+  const [panelPx, setPanelPx] = useState(() => Number(localStorage.getItem('pos_basket_px')) || 400)
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 768px)').matches)
+
+  // the panel switches between the two dimensions at the md breakpoint
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const onChange = (e) => setIsDesktop(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  function resizeBasket(next) {
+    if (isDesktop) {
+      setPanelPx(next)
+      localStorage.setItem('pos_basket_px', String(next))
+    } else {
+      setSheetVh(next)
+      localStorage.setItem('pos_basket_vh', String(next))
+    }
+  }
 
   useEffect(() => {
     api('/api/products').then(setProducts).catch((e) => setError(e.message))
@@ -89,10 +112,18 @@ export default function SellerPanel() {
   }
 
   return (
-    // Make room for the open basket so the grid is never hidden behind it:
-    // on desktop it takes the right 25rem, on a phone the bottom 60vh (plus a bit
-    // extra so the last row's -/+ controls can still be scrolled into view).
-    <div className={`space-y-4 ${basketOpen ? 'pb-[64vh] md:pb-0 md:pr-[25rem]' : ''}`}>
+    // Make room for the open basket so the grid is never hidden behind it. The
+    // reserved space follows the size the seller dragged the basket to.
+    <div
+      className="space-y-4"
+      style={
+        basketOpen
+          ? isDesktop
+            ? { paddingRight: panelPx + 24 }
+            : { paddingBottom: `calc(${sheetVh}vh + 1rem)` }
+          : undefined
+      }
+    >
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
       <ParticipantBar participant={participant} onOpenPicker={() => setPickerOpen(true)} onClear={() => setParticipant(null)} />
@@ -137,6 +168,9 @@ export default function SellerPanel() {
           onPickParticipant={() => setPickerOpen(true)} // choose/change the person from INSIDE the basket
           onClose={() => setBasketOpen(false)}
           onSold={handleSold}
+          isDesktop={isDesktop}
+          size={isDesktop ? panelPx : sheetVh}
+          onResize={resizeBasket}
         />
       )}
 
@@ -203,10 +237,12 @@ function CategoryTabs({ products, active, onChange }) {
     // horizontal swipe instead of wrapping - keeps the grid high on small screens.
     // no-scrollbar hides the scrollbar; the row stays inside the page padding so
     // it lines up with the cards above and below it.
-    <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x py-0.5">
-      <button onClick={() => onChange(null)} className={`${tabClass(active === null)} snap-start`}>Alle</button>
+    // snap-mandatory + snap-start: scrolling always lands with a chip flush at the
+    // left edge, so you never end up looking at a half-cut category
+    <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-pl-1 py-0.5">
+      <button onClick={() => onChange(null)} className={`${tabClass(active === null)} snap-start shrink-0`}>Alle</button>
       {categories.map((c) => (
-        <button key={c} onClick={() => onChange(c)} className={`${tabClass(active === c)} snap-start`}>{c}</button>
+        <button key={c} onClick={() => onChange(c)} className={`${tabClass(active === c)} snap-start shrink-0`}>{c}</button>
       ))}
     </div>
   )
@@ -285,7 +321,7 @@ function ProductGrid({ products, cart, onAdd, onChangeQty }) {
 // ---------------------------------------------------------------- basket / checkout
 // Docked rather than full-screen so the product grid stays visible and reachable:
 // a right-hand panel on a laptop, a bottom sheet on a phone.
-function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold }) {
+function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold, isDesktop, size, onResize }) {
   const [cashInput, setCashInput] = useState('') // what the buyer hands over, as typed
   // The seller must ACTIVELY choose one method - no default. Each method is a single, clear
   // intent, so cash and balance can never silently fight each other (the old bug).
@@ -318,6 +354,29 @@ function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPick
   const useBalance = method === 'balance'
   const keepChangeAsCredit = method === 'cash' && payExtra && !!participant
 
+  // Drag to resize: vertical on a phone (sheet height in vh), horizontal on a
+  // laptop (panel width in px). setPointerCapture keeps the drag alive even when
+  // the pointer leaves the little handle.
+  function startResize(event) {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    const onMove = (e) => {
+      if (isDesktop) {
+        onResize(Math.min(Math.max(window.innerWidth - e.clientX, 320), 640))
+      } else {
+        const vh = ((window.innerHeight - e.clientY) / window.innerHeight) * 100
+        onResize(Math.min(Math.max(vh, 30), 88))
+      }
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
   // tapping the already-active method clears it again (back to "nothing chosen")
   function chooseMethod(next) {
     setMethod((current) => (current === next ? null : next))
@@ -349,11 +408,32 @@ function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPick
     // phone: bottom sheet leaving the products visible above.
     // laptop (md+): fixed right-hand column next to the grid.
     // phone: bottom sheet over the tab bar (z-40), so the confirm button isn't hidden by it.
-    // 60vh leaves a usable strip of products above it that the seller can keep tapping.
-    <div className="fixed z-40 bg-white flex flex-col
-                    inset-x-0 bottom-0 h-[60vh] rounded-t-2xl shadow-2xl
-                    md:inset-x-auto md:top-14 md:right-0 md:bottom-0 md:h-auto md:w-[25rem]
-                    md:rounded-none md:border-l md:border-gray-200 md:shadow-xl">
+    // Height/width come from the size the seller dragged it to.
+    <div
+      className="fixed z-40 bg-white flex flex-col
+                 inset-x-0 bottom-0 rounded-t-2xl shadow-2xl
+                 md:inset-x-auto md:top-14 md:right-0 md:bottom-0 md:h-auto
+                 md:rounded-none md:border-l md:border-gray-200 md:shadow-xl"
+      style={isDesktop ? { width: size } : { height: `${size}vh` }}
+    >
+      {/* drag handle: a grabber bar on a phone, the left edge on a laptop */}
+      <div
+        onPointerDown={startResize}
+        title="Ziehen zum Vergrößern/Verkleinern"
+        className="md:hidden pt-2 pb-1 flex justify-center cursor-row-resize touch-none shrink-0"
+      >
+        <span className="w-10 h-1.5 rounded-full bg-gray-300" />
+      </div>
+      <div
+        onPointerDown={startResize}
+        title="Ziehen zum Vergrößern/Verkleinern"
+        // Straddles the panel edge and is 12px wide: a 6px target is fiddly to grab.
+        // z-10 because the header and content are later siblings and would otherwise
+        // paint over it and swallow the pointerdown.
+        className="hidden md:block absolute -left-1.5 top-0 bottom-0 w-3 z-10 cursor-col-resize touch-none
+                   before:absolute before:inset-y-0 before:left-1.5 before:w-0.5 hover:before:bg-primary/40"
+      />
+
       {/* header stays put while the contents scroll */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
         <h2 className="text-lg font-bold flex items-center gap-2">

@@ -48,6 +48,30 @@ body {
   background-color: var(--color-page);
 }
 
+/* Slim, rounded scrollbars that match the surface colours instead of the default
+   chunky grey ones. The transparent border + background-clip trick insets the
+   thumb so it looks like a floating pill rather than a full-width bar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gray-300) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-gray-300);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-gray-400);
+}
+
 /* Horizontal swipe rows (category tabs, chip rows): keep the scrolling, hide the
    scrollbar. A visible bar under a row of pills looks broken on a phone. */
 .no-scrollbar {
