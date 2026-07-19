@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, HelpCircle, KeyRound, LogOut } from 'lucide-react'
+import { Check, ChevronDown, HelpCircle, KeyRound, LogOut, Palette } from 'lucide-react'
 import { useAuth, roleLabel } from '../auth'
+import { THEMES, applyTheme, loadTheme } from '../theme'
 
 // Account/settings menu in the top bar. Replaces the lone key icon: everything
 // personal (who am I, password, sign out) lives behind one predictable button.
 export default function AccountMenu({ onChangePassword, onShowGuide }) {
   const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
+  const [theme, setTheme] = useState(loadTheme)
   const ref = useRef(null)
+
+  function chooseTheme(id) {
+    applyTheme(id)
+    setTheme(id) // keep the tick mark in sync; applyTheme does the visual work
+  }
 
   // close on outside click or Escape - expected behaviour for a dropdown
   useEffect(() => {
@@ -55,6 +62,31 @@ export default function AccountMenu({ onChangePassword, onShowGuide }) {
             <div className="text-xs text-gray-500">
               {roleLabel(user.role)}
               {user.campName ? ` · ${user.campName}` : ''}
+            </div>
+          </div>
+
+          {/* one-click theme switch */}
+          <div className="px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+              <Palette className="w-3.5 h-3.5" /> Design
+            </div>
+            <div className="flex gap-2">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => chooseTheme(t.id)}
+                  title={t.label}
+                  className={`flex-1 rounded-lg border px-2 py-2 text-[11px] font-medium flex flex-col items-center gap-1 ${
+                    theme === t.id ? 'border-primary bg-primary-soft text-primary' : 'border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full border border-black/10 flex items-center justify-center"
+                        style={{ background: t.swatch }}>
+                    {theme === t.id && <Check className="w-3 h-3 text-white" />}
+                  </span>
+                  {t.label}
+                </button>
+              ))}
             </div>
           </div>
 

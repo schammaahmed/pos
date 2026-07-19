@@ -7,6 +7,8 @@ import { api } from '../api'
 import { useAuth, roleLabel } from '../auth'
 import { ConfirmDialog } from '../components/Dialog'
 import SetupChecklist from '../components/SetupChecklist'
+import StatDetailDialog from '../components/StatDetailDialog'
+import InviteCard from '../components/InviteCard'
 import { Avatar, Badge, EmptyState, SectionHeader, StatCard } from '../components/ui'
 import { fmt } from '../money'
 
@@ -25,6 +27,8 @@ export default function Admin() {
   const [showCampForm, setShowCampForm] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
   const [campToClose, setCampToClose] = useState(null) // camp awaiting the close confirmation
+  const [detail, setDetail] = useState(null) // which stat tile is drilled into
+  const [invite, setInvite] = useState(null) // credentials sheet for a freshly created user
   // which camp the figures refer to. A camp admin only ever has their own; a super
   // admin has none of their own, so they pick one (defaults to the first active camp).
   const [statsCampId, setStatsCampId] = useState(user.campId ?? null)
@@ -120,6 +124,76 @@ export default function Admin() {
 
   const statsCamp = camps.find((c) => c.id === statsCampId)
 
+  // Rows behind each tile, so any figure can be verified against its parts.
+  function detailContent() {
+    const saleRow = (s) => ({
+      key: s.id,
+      label: s.participantName ?? 'Barverkauf',
+      hint: `${s.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')} · ${new Date(s.createdAt).toLocaleString('de-AT')} · ${s.sellerName}`,
+      value: fmt(s.totalAmount),
+    })
+    const booked = sales.filter((s) => s.status === 'COMPLETED')
+    const today = new Date().toDateString()
+
+    switch (detail) {
+      case 'revenueToday': {
+        const rows = booked.filter((s) => new Date(s.createdAt).toDateString() === today)
+        return {
+          title: 'Umsatz heute', subtitle: 'Alle gebuchten Verkäufe von heute',
+          rows: rows.map(saleRow), total: { label: 'Summe', value: fmt(stats.revenueToday) },
+          emptyText: 'Heute noch nichts verkauft.',
+        }
+      }
+      case 'revenueTotal':
+        return {
+          title: 'Umsatz gesamt', subtitle: 'Alle gebuchten Verkäufe dieses Camps',
+          rows: booked.map(saleRow), total: { label: 'Summe', value: fmt(stats.revenueTotal) },
+        }
+      case 'participants':
+        return {
+          title: 'Teilnehmer', subtitle: `${participants.length} im Camp`,
+          rows: participants.map((p) => ({
+            key: p.id,
+            label: `${p.firstName} ${p.lastName}`,
+            hint: p.inDebt ? 'offene Schulden' : 'Guthaben',
+            value: fmt(Math.abs(Number(p.balance))),
+          })),
+        }
+      case 'debt': {
+        const debtors = participants.filter((p) => p.inDebt)
+        return {
+          title: 'Offene Schulden', subtitle: 'Wer noch zahlen muss',
+          rows: debtors.map((p) => ({
+            key: p.id, label: `${p.firstName} ${p.lastName}`, value: fmt(Math.abs(Number(p.balance))),
+          })),
+          total: { label: 'Gesamt offen', value: fmt(stats.openDebt) },
+          emptyText: 'Niemand ist im Minus.',
+        }
+      }
+      case 'team':
+        return {
+          title: 'Team', subtitle: `${stats.activeTeam} von ${users.length} aktiv`,
+          rows: users.map((u) => ({
+            key: u.id,
+            label: `${u.firstName} ${u.lastName}`,
+            hint: roleLabel(u.role),
+            value: u.active ? 'aktiv' : 'deaktiviert',
+          })),
+        }
+      case 'reversed': {
+        const rows = sales.filter((s) => s.status === 'REVERSED')
+        return {
+          title: 'Stornierte Verkäufe',
+          subtitle: stats.flagged ? `${stats.flagged} davon noch zu prüfen` : 'nichts offen zu prüfen',
+          rows: rows.map((s) => ({ ...saleRow(s), hint: `${saleRow(s).hint}${s.flaggedForReview ? ' · zu prüfen' : ''}` })),
+          emptyText: 'Nichts storniert.',
+        }
+      }
+      default:
+        return { title: '', rows: [] }
+    }
+  }
+
   // The four things a camp needs before the stand can sell. Sellers/leads are the
   // people who actually staff it, so an admin on their own doesn't count as "team".
   const setupSteps = [
@@ -177,25 +251,33 @@ export default function Admin() {
         </SectionHeader>
 
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          <StatCard label="Umsatz heute" value={fmt(stats.revenueToday)} hint={`${stats.salesToday} Verkäufe`} tone="primary" icon={Euro} />
-          <StatCard label="Umsatz gesamt" value={fmt(stats.revenueTotal)} hint={`${stats.salesTotal} Verkäufe`} tone="success" icon={Receipt} />
-          <StatCard label="Teilnehmer" value={stats.participants} tone="info" icon={Users} />
+          <StatCard label="Umsatz heute" value={fmt(stats.revenueToday)} hint={`${stats.salesToday} Verkäufe`}
+                    tone="primary" icon={Euro} onClick={() => setDetail('revenueToday')} />
+          <StatCard label="Umsatz gesamt" value={fmt(stats.revenueTotal)} hint={`${stats.salesTotal} Verkäufe`}
+                    tone="success" icon={Receipt} onClick={() => setDetail('revenueTotal')} />
+          <StatCard label="Teilnehmer" value={stats.participants}
+                    tone="info" icon={Users} onClick={() => setDetail('participants')} />
           <StatCard
             label="Offene Schulden"
             value={fmt(stats.openDebt)}
             hint={stats.debtors ? `${stats.debtors} Teilnehmer` : 'niemand im Minus'}
             tone={stats.debtors ? 'accent' : 'neutral'}
             icon={TrendingDown}
+            onClick={() => setDetail('debt')}
           />
-          <StatCard label="Team aktiv" value={stats.activeTeam} hint={`${users.length} gesamt`} tone="neutral" icon={UserRound} />
+          <StatCard label="Team aktiv" value={stats.activeTeam} hint={`${users.length} gesamt`}
+                    tone="neutral" icon={UserRound} onClick={() => setDetail('team')} />
           <StatCard
             label="Storniert"
             value={stats.reversed}
             hint={stats.flagged ? `${stats.flagged} zu prüfen` : 'nichts offen'}
             tone={stats.flagged ? 'warning' : 'neutral'}
             icon={Package}
+            onClick={() => setDetail('reversed')}
           />
         </div>
+
+        {detail && <StatDetailDialog {...detailContent()} onClose={() => setDetail(null)} />}
       </section>
 
       {/* -------------------------------------------- recent sales + rankings */}
@@ -357,8 +439,16 @@ export default function Admin() {
 
       {showCampForm && <CampForm onClose={() => setShowCampForm(false)} onSaved={reload} />}
       {showUserForm && (
-        <UserForm camps={camps} isSuper={isSuper} onClose={() => setShowUserForm(false)} onSaved={reload} />
+        <UserForm
+          camps={camps}
+          isSuper={isSuper}
+          onClose={() => setShowUserForm(false)}
+          onSaved={reload}
+          onCreated={setInvite} // hand over the credentials sheet to pass on
+        />
       )}
+
+      {invite && <InviteCard invite={invite} onClose={() => setInvite(null)} />}
     </div>
   )
 }
@@ -405,7 +495,7 @@ function CampForm({ onClose, onSaved }) {
   )
 }
 
-function UserForm({ camps, isSuper, onClose, onSaved }) {
+function UserForm({ camps, isSuper, onClose, onSaved, onCreated }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -422,7 +512,7 @@ function UserForm({ camps, isSuper, onClose, onSaved }) {
   async function submit(event) {
     event.preventDefault()
     try {
-      await api('/api/users', {
+      const created = await api('/api/users', {
         method: 'POST',
         body: {
           firstName,
@@ -436,6 +526,9 @@ function UserForm({ camps, isSuper, onClose, onSaved }) {
       })
       onSaved()
       onClose()
+      // the plain password only exists here, in this form - the API never returns
+      // it again, so the invite sheet has to be built from what we just typed
+      onCreated({ ...created, password })
     } catch (e) {
       setError(e.message)
     }

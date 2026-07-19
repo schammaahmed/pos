@@ -5,6 +5,9 @@ import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/plus-jakarta-sans'
 import './index.css'
 import App from './App.jsx'
+import { initTheme } from './theme'
+
+initTheme() // before mount, so the saved theme never flashes the default first
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
