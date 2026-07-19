@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, Package, Pencil, X } from 'lucide-react'
+import { Eye, EyeOff, FileSpreadsheet, Package, Pencil, X } from 'lucide-react'
 import { api } from '../api'
 import { useAuth, isLead } from '../auth'
 import { fmt } from '../money'
 import { Badge, EmptyState, ViewToggle } from '../components/ui'
+import ImportDialog from '../components/ImportDialog'
 
 const VIEW_KEY = 'pos_products_view'
 
@@ -15,6 +16,7 @@ export default function Products() {
   const [products, setProducts] = useState([])
   const [editing, setEditing] = useState(null) // null | 'new' | product object
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list')
+  const [showImport, setShowImport] = useState(false)
   const [error, setError] = useState(null)
 
   function changeView(next) {
@@ -48,9 +50,15 @@ export default function Products() {
     <div className="space-y-4">
       <div className="flex gap-2 items-center">
         {canEdit && (
-          <button onClick={() => setEditing('new')} className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">
-            + Produkt anlegen
-          </button>
+          <>
+            <button onClick={() => setEditing('new')} className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">
+              + Produkt anlegen
+            </button>
+            <button onClick={() => setShowImport(true)} title="Aus Excel importieren"
+                    className="border rounded-lg px-3 py-3 text-sm bg-white hover:bg-gray-50 shrink-0 flex items-center gap-1.5">
+              <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
+            </button>
+          </>
         )}
         <ViewToggle view={view} onChange={changeView} />
       </div>
@@ -140,6 +148,10 @@ export default function Products() {
             </div>
           ))}
         </div>
+      )}
+
+      {showImport && (
+        <ImportDialog kind="products" onClose={() => setShowImport(false)} onImported={reload} />
       )}
 
       {editing && (

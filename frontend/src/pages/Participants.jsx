@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Search, TrendingDown, UserRound, Users, Wallet } from 'lucide-react'
+import { FileSpreadsheet, Search, TrendingDown, UserRound, Users, Wallet } from 'lucide-react'
 import { api } from '../api'
 import { useAuth, isLead } from '../auth'
 import { fmt } from '../money'
 import { AmountDialog, ConfirmDialog } from '../components/Dialog'
+import ImportDialog from '../components/ImportDialog'
 import { Badge, EmptyState, StatCard, ViewToggle } from '../components/ui'
 
 const VIEW_KEY = 'pos_participants_view'
@@ -17,6 +18,7 @@ export default function Participants() {
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list')
   const [error, setError] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   function changeView(next) {
     setView(next)
@@ -54,9 +56,15 @@ export default function Participants() {
         </div>
         <ViewToggle view={view} onChange={changeView} />
         {isLead(user) && (
-          <button onClick={() => setShowCreate(true)} className="bg-primary text-white rounded-lg px-4 font-semibold shrink-0">
-            + Neu
-          </button>
+          <>
+            <button onClick={() => setShowImport(true)} title="Aus Excel importieren"
+                    className="border rounded-lg px-3 py-2.5 text-sm bg-white hover:bg-gray-50 shrink-0 flex items-center gap-1.5">
+              <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
+            </button>
+            <button onClick={() => setShowCreate(true)} className="bg-primary text-white rounded-lg px-4 font-semibold shrink-0">
+              + Neu
+            </button>
+          </>
         )}
       </div>
 
@@ -144,6 +152,9 @@ export default function Participants() {
       )}
 
       {showCreate && <CreateParticipantForm onClose={() => setShowCreate(false)} onCreated={reload} />}
+      {showImport && (
+        <ImportDialog kind="participants" onClose={() => setShowImport(false)} onImported={reload} />
+      )}
     </div>
   )
 }
