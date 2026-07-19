@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* v1 color scheme, kept from the previous POS version.
+   @theme registers design tokens with Tailwind - every token automatically
+   gets utility classes: bg-primary, text-accent, border-primary-dark, ... */
+@theme {
+  --color-primary: #0e7d8a;      /* teal - main actions (v1 "Pay Cash") */
+  --color-primary-dark: #1d3a45; /* dark slate-teal - secondary actions (v1 "Pay Extra") */
+  --color-accent: #c81063;       /* magenta - debt / caution (v1 "Debt") */
+  --color-page: #eef2f5;         /* page background */
+}
+
+/* Tailwind v4 changed the default border colour from gray-200 to currentColor,
+   so every `border` and `divide-y` was drawing in the text colour - i.e. hard
+   black lines between list rows. Restore a soft default for the whole app. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200);
+  }
+}
+
+/* system font stack - loads instantly, looks native on every device */
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--color-page);
+}
+
+/* Horizontal swipe rows (category tabs, chip rows): keep the scrolling, hide the
+   scrollbar. A visible bar under a row of pills looks broken on a phone. */
+.no-scrollbar {
+  scrollbar-width: none;              /* Firefox */
+  -ms-overflow-style: none;           /* legacy Edge */
+  -webkit-overflow-scrolling: touch;  /* momentum scrolling on iOS */
+  scroll-behavior: smooth;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

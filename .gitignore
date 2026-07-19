@@ -23,6 +23,11 @@
 hs_err_pid*
 replay_pid*
 
-.env 
+.env
 application.properties
 *.csv
+*.xlsx
+*.cmd
+
+# macOS folder metadata - never belongs in a repo
+.DS_Store

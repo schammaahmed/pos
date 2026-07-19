@@ -1,0 +1,191 @@
+package com.pos.backend.service;
+
+import com.pos.backend.dto.SaleDtos.CheckoutItem;
+import com.pos.backend.dto.SaleDtos.CheckoutRequest;
+import com.pos.backend.dto.SaleDtos.SaleResponse;
+import com.pos.backend.entity.*;
+import com.pos.backend.repository.ParticipantRepository;
+import com.pos.backend.repository.ProductRepository;
+import com.pos.backend.repository.SaleRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class SaleService {
+
+    private final SaleRepository saleRepository;
+    private final ParticipantRepository participantRepository;
+    private final ProductRepository productRepository;
+    private final CampAccess campAccess;
+    private final TransactionTemplate transactionTemplate;
+
+    // Retry wrapper around the actual checkout. If two sellers charge the SAME participant at the
+    // same moment, the optimistic lock (@Version on Participant) makes the slower one fail -
+    // we then simply re-run with the fresh balance. 3 attempts is plenty for a selling stand.
+    public SaleResponse checkout(User currentUser, CheckoutRequest request) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                // TransactionTemplate = programmatic @Transactional. We need it because the retry
+                // must happen OUTSIDE the transaction (a failed transaction can't be reused).
+                return transactionTemplate.execute(status -> doCheckout(currentUser, request));
+            } catch (OptimisticLockingFailureException e) {
+                if (attempt >= 3) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "The participant was charged by someone else at the same time - please try again");
+                }
+            }
+        }
+    }
+
+    private SaleResponse doCheckout(User currentUser, CheckoutRequest request) {
+        Camp camp = campAccess.resolveCamp(currentUser, request.campId());
+        campAccess.checkCampActive(camp);
+
+        // load participant (if any) and verify they belong to this camp
+        Participant participant = null;
+        if (request.participantId() != null) {
+            participant = participantRepository.findById(request.participantId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Participant not found"));
+            campAccess.checkSameCamp(currentUser, participant.getCamp());
+        }
+
+        // anonymous sales are cash-only: nobody to put debt or credit on
+        if (participant == null && (request.useBalance() || request.keepChangeAsCredit())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Balance and credit options need a participant");
+        }
+
+        Sale sale = new Sale();
+        sale.setCamp(camp);
+        sale.setParticipant(participant);
+        sale.setSeller(currentUser);
+
+        // build the items and the total from CURRENT product prices
+        BigDecimal total = BigDecimal.ZERO;
+        for (CheckoutItem itemRequest : request.items()) {
+            Product product = productRepository.findById(itemRequest.productId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
+            campAccess.checkSameCamp(currentUser, product.getCamp());
+            if (!product.isActive()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Product is not for sale: " + product.getName());
+            }
+            if (!product.getCamp().getId().equals(camp.getId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Product belongs to another camp: " + product.getName());
+            }
+
+            SaleItem item = new SaleItem();
+            item.setSale(sale);
+            item.setProduct(product);
+            item.setQuantity(itemRequest.quantity());
+            item.setUnitPrice(product.getPrice()); // price snapshot
+            sale.getItems().add(item);
+
+            total = total.add(product.getPrice().multiply(BigDecimal.valueOf(itemRequest.quantity())));
+        }
+
+        BigDecimal balance = participant != null ? participant.getBalance() : BigDecimal.ZERO;
+        PaymentSplit split = PaymentSplit.compute(total, request.cashGiven(), balance,
+                request.useBalance(), request.keepChangeAsCredit());
+
+        // anonymous sale must be fully covered by cash (no participant = no debt possible)
+        if (participant == null && split.debtAmount().signum() > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Not enough cash given (anonymous sales cannot go into debt)");
+        }
+
+        sale.setTotalAmount(total);
+        sale.setPaidCash(split.paidCash());
+        sale.setPaidFromBalance(split.paidFromBalance());
+        sale.setDebtAmount(split.debtAmount());
+        sale.setExtraCredited(split.extraCredited());
+
+        // apply the balance change - this is the UPDATE the optimistic lock protects
+        if (participant != null) {
+            participant.setBalance(participant.getBalance().add(split.balanceDelta()));
+            participantRepository.save(participant);
+        }
+
+        sale = saleRepository.save(sale); // cascade saves the items too
+        return SaleResponse.from(sale,
+                PaymentSplit.changeToReturn(total, request.cashGiven(), request.keepChangeAsCredit()));
+    }
+
+    // Reversing = undoing a mistaken sale. The sale row STAYS (audit trail), only its status flips
+    // and the participant gets their money back. A plain SELLER's reversal is flagged so the
+    // SELLER_LEAD can double check it later (requirement: mistakes happen under stress).
+    @Transactional
+    public SaleResponse reverse(User currentUser, Long saleId) {
+        Sale sale = saleRepository.findById(saleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found"));
+        campAccess.checkSameCamp(currentUser, sale.getCamp());
+
+        if (sale.getStatus() == Sale.Status.REVERSED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This sale is already reversed");
+        }
+
+        // undo the balance effect: give back what was taken (balance + debt), take back what was gifted (credit)
+        Participant participant = sale.getParticipant();
+        if (participant != null) {
+            BigDecimal restore = sale.getPaidFromBalance()
+                    .add(sale.getDebtAmount())
+                    .subtract(sale.getExtraCredited());
+            participant.setBalance(participant.getBalance().add(restore));
+            participantRepository.save(participant);
+        }
+
+        sale.setStatus(Sale.Status.REVERSED);
+        sale.setReversedBy(currentUser);
+        sale.setReversedAt(LocalDateTime.now());
+        sale.setFlaggedForReview(currentUser.getRole() == Role.SELLER); // leads/admins reverse without flag
+
+        return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
+    }
+
+    // the lead ticks off a flagged reversal after checking it was legitimate
+    @Transactional
+    public SaleResponse approveReversal(User currentUser, Long saleId) {
+        Sale sale = saleRepository.findById(saleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found"));
+        campAccess.checkSameCamp(currentUser, sale.getCamp());
+
+        if (!sale.isFlaggedForReview()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This sale is not flagged for review");
+        }
+        sale.setFlaggedForReview(false);
+        sale.setReviewedBy(currentUser);
+        return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
+    }
+
+    public List<SaleResponse> list(User currentUser, Long campId, Long participantId) {
+        List<Sale> sales;
+        if (participantId != null) {
+            // camp check happens through the participant
+            Participant p = participantRepository.findById(participantId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found"));
+            campAccess.checkSameCamp(currentUser, p.getCamp());
+            sales = saleRepository.findByParticipantIdOrderByCreatedAtDesc(participantId);
+        } else {
+            Camp camp = campAccess.resolveCamp(currentUser, campId);
+            sales = saleRepository.findByCampIdOrderByCreatedAtDesc(camp.getId());
+        }
+        return sales.stream().map(s -> SaleResponse.from(s, BigDecimal.ZERO)).toList();
+    }
+
+    public List<SaleResponse> flagged(User currentUser, Long campId) {
+        Camp camp = campAccess.resolveCamp(currentUser, campId);
+        return saleRepository.findByCampIdAndFlaggedForReviewTrueOrderByReversedAtDesc(camp.getId())
+                .stream().map(s -> SaleResponse.from(s, BigDecimal.ZERO)).toList();
+    }
+}
