@@ -54,6 +54,7 @@ export default function SellerPanel() {
 
   function addToCart(product) {
     setCart((c) => ({ ...c, [product.id]: (c[product.id] || 0) + 1 }))
+    setBasketOpen(true) // show the running basket straight away, not only via the cart button
   }
 
   function changeQty(productId, delta) {
@@ -200,9 +201,9 @@ function CategoryTabs({ products, active, onChange }) {
 
   return (
     // horizontal swipe instead of wrapping - keeps the grid high on small screens.
-    // no-scrollbar hides the scrollbar; the negative margin lets the row bleed to
-    // the screen edge so it reads as swipeable rather than cut off.
-    <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x -mx-4 px-4 md:mx-0 md:px-0">
+    // no-scrollbar hides the scrollbar; the row stays inside the page padding so
+    // it lines up with the cards above and below it.
+    <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x py-0.5">
       <button onClick={() => onChange(null)} className={`${tabClass(active === null)} snap-start`}>Alle</button>
       {categories.map((c) => (
         <button key={c} onClick={() => onChange(c)} className={`${tabClass(active === c)} snap-start`}>{c}</button>
