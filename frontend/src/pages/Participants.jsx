@@ -102,7 +102,7 @@ export default function Participants() {
           ))}
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm divide-y overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
           {participants.map((p) => (
             <ParticipantRow
               key={p.id}

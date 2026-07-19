@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
-import { ClipboardCheck, KeyRound, LogOut, Menu, Package, Settings, ShoppingCart, Users } from 'lucide-react'
+import { ClipboardCheck, LogOut, Menu, Package, Settings, ShoppingCart, Users } from 'lucide-react'
 import { useAuth, isLead } from '../auth'
+import AccountMenu from './AccountMenu'
 import ChangePassword from './ChangePassword'
 
 const SIDEBAR_KEY = 'pos_sidebar_collapsed'
@@ -82,25 +83,9 @@ export default function Layout() {
         {/* centre: date and time, like v1 (hidden on phones - no room) */}
         <div className="hidden md:block flex-1 text-center text-sm text-gray-500">{dateLine}</div>
 
-        {/* right: greeting + account actions */}
-        <div className="ml-auto md:ml-0 flex items-center gap-1 shrink-0 md:w-56 md:justify-end">
-          <span className="hidden sm:inline text-sm text-gray-600 mr-1">
-            Hallo, <span className="font-semibold text-gray-900">{user.firstName}</span>
-          </span>
-          <button
-            onClick={() => setShowPasswordForm(true)}
-            className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:bg-gray-100"
-            title="Passwort ändern"
-          >
-            <KeyRound className="w-5 h-5" />
-          </button>
-          <button
-            onClick={logout}
-            className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:bg-gray-100"
-            title="Abmelden"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+        {/* right: one account menu holding greeting, password and sign out */}
+        <div className="ml-auto md:ml-0 flex items-center shrink-0 md:w-56 md:justify-end">
+          <AccountMenu onChangePassword={() => setShowPasswordForm(true)} />
         </div>
       </header>
 

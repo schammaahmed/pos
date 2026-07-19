@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Lightbulb } from 'lucide-react'
 import { api } from '../api'
-import { useAuth } from '../auth'
+import { useAuth, roleLabel } from '../auth'
 import { ConfirmDialog } from '../components/Dialog'
 
 // Admin area. CAMP_ADMIN: manage their camp's team. SUPER_ADMIN: additionally manage camps.
@@ -60,7 +60,7 @@ export default function Admin() {
             </button>
           )}
         </div>
-        <div className="bg-white rounded-xl shadow-sm divide-y">
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
           {camps.map((c) => (
             <div key={c.id} className="p-3 flex justify-between items-center">
               <div>
@@ -88,7 +88,7 @@ export default function Admin() {
             + Benutzer
           </button>
         </div>
-        <div className="bg-white rounded-xl shadow-sm divide-y">
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
           {users.map((u) => (
             <div key={u.id} className={`p-3 flex justify-between items-center ${u.active ? '' : 'opacity-50'}`}>
               <div>
@@ -128,15 +128,6 @@ export default function Admin() {
       )}
     </div>
   )
-}
-
-function roleLabel(role) {
-  return {
-    SUPER_ADMIN: 'Super-Admin',
-    CAMP_ADMIN: 'Camp-Admin',
-    SELLER_LEAD: 'Stand-Leitung',
-    SELLER: 'Verkäufer:in',
-  }[role] ?? role
 }
 
 function CampForm({ onClose, onSaved }) {

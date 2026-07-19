@@ -96,7 +96,7 @@ export default function Products() {
           ))}
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm divide-y overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
           {products.map((p) => (
             <div key={p.id}
                  className={`flex items-center gap-3 p-3 hover:bg-gray-50 ${p.active ? '' : 'opacity-60'}`}>

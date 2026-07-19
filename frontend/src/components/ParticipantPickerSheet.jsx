@@ -140,7 +140,7 @@ export default function ParticipantPickerSheet({ onSelect, onClose }) {
             {groups.map(([letter, people]) => (
               <div key={letter} id={`picker-letter-${letter}`}>
                 <div className="text-xs font-bold text-gray-400 mt-3 mb-1">{letter}</div>
-                <div className="bg-white rounded-xl shadow-sm divide-y">
+                <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
                   {people.map((p) => (
                     <button key={p.id} onClick={() => pick(p)}
                             className="w-full flex justify-between items-center p-3 active:bg-gray-100">

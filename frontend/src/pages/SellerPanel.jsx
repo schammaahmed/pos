@@ -88,9 +88,10 @@ export default function SellerPanel() {
   }
 
   return (
-    // while the basket is open on desktop it takes the right 24rem - pad the content
-    // so the product grid stays fully visible instead of hiding behind it
-    <div className={`space-y-4 ${basketOpen ? 'md:pr-[25rem]' : ''}`}>
+    // Make room for the open basket so the grid is never hidden behind it:
+    // on desktop it takes the right 25rem, on a phone the bottom 60vh (plus a bit
+    // extra so the last row's -/+ controls can still be scrolled into view).
+    <div className={`space-y-4 ${basketOpen ? 'pb-[64vh] md:pb-0 md:pr-[25rem]' : ''}`}>
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
       <ParticipantBar participant={participant} onOpenPicker={() => setPickerOpen(true)} onClear={() => setParticipant(null)} />
@@ -198,11 +199,13 @@ function CategoryTabs({ products, active, onChange }) {
     }`
 
   return (
-    // horizontal scroll instead of wrapping - keeps the grid high on small screens
-    <div className="flex gap-2 overflow-x-auto pb-1">
-      <button onClick={() => onChange(null)} className={tabClass(active === null)}>Alle</button>
+    // horizontal swipe instead of wrapping - keeps the grid high on small screens.
+    // no-scrollbar hides the scrollbar; the negative margin lets the row bleed to
+    // the screen edge so it reads as swipeable rather than cut off.
+    <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x -mx-4 px-4 md:mx-0 md:px-0">
+      <button onClick={() => onChange(null)} className={`${tabClass(active === null)} snap-start`}>Alle</button>
       {categories.map((c) => (
-        <button key={c} onClick={() => onChange(c)} className={tabClass(active === c)}>{c}</button>
+        <button key={c} onClick={() => onChange(c)} className={`${tabClass(active === c)} snap-start`}>{c}</button>
       ))}
     </div>
   )
@@ -344,9 +347,10 @@ function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPick
   return (
     // phone: bottom sheet leaving the products visible above.
     // laptop (md+): fixed right-hand column next to the grid.
-    // phone: bottom sheet over the tab bar (z-40), so the confirm button isn't hidden by it
+    // phone: bottom sheet over the tab bar (z-40), so the confirm button isn't hidden by it.
+    // 60vh leaves a usable strip of products above it that the seller can keep tapping.
     <div className="fixed z-40 bg-white flex flex-col
-                    inset-x-0 bottom-0 h-[72vh] rounded-t-2xl shadow-2xl
+                    inset-x-0 bottom-0 h-[60vh] rounded-t-2xl shadow-2xl
                     md:inset-x-auto md:top-14 md:right-0 md:bottom-0 md:h-auto md:w-[25rem]
                     md:rounded-none md:border-l md:border-gray-200 md:shadow-xl">
       {/* header stays put while the contents scroll */}
@@ -379,7 +383,7 @@ function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPick
         </button>
 
         {/* basket lines with +/- : the "final check with overview" from the requirements */}
-        <div className="bg-gray-50 rounded-xl divide-y">
+        <div className="bg-gray-50 rounded-xl divide-y divide-gray-100">
           {cartEntries.map((e) => (
             <div key={e.product.id} className="flex items-center gap-3 p-3">
               <div className="flex-1">
