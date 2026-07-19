@@ -82,7 +82,20 @@ export default function Participants() {
       </div>
 
       {participants.length === 0 ? (
-        <EmptyState icon={UserRound}>Keine Teilnehmer gefunden.</EmptyState>
+        <EmptyState
+          icon={UserRound}
+          hint={
+            search
+              ? 'Andere Schreibweise probieren oder die Suche leeren.'
+              : isLead(user)
+                ? 'Lege die Kinder an, die am Stand einkaufen können.'
+                : undefined
+          }
+          action={!search && isLead(user) ? () => setShowCreate(true) : undefined}
+          cta="Ersten Teilnehmer anlegen"
+        >
+          {search ? `Niemand gefunden für „${search}".` : 'Noch keine Teilnehmer.'}
+        </EmptyState>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {participants.map((p) => (

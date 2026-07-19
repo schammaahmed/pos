@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Crown, Euro, Lightbulb, Package, Receipt, TrendingDown, Trophy, UserRound, Users,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth, roleLabel } from '../auth'
 import { ConfirmDialog } from '../components/Dialog'
+import SetupChecklist from '../components/SetupChecklist'
 import { Avatar, Badge, EmptyState, SectionHeader, StatCard } from '../components/ui'
 import { fmt } from '../money'
 
@@ -12,11 +14,13 @@ import { fmt } from '../money'
 // Everything on the dashboard is derived from the existing endpoints - no extra API needed.
 export default function Admin() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const isSuper = user.role === 'SUPER_ADMIN'
   const [camps, setCamps] = useState([])
   const [users, setUsers] = useState([])
   const [sales, setSales] = useState([])
   const [participants, setParticipants] = useState([])
+  const [products, setProducts] = useState([]) // only for the setup checklist
   const [error, setError] = useState(null)
   const [showCampForm, setShowCampForm] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
@@ -50,6 +54,7 @@ export default function Admin() {
     const q = `?campId=${statsCampId}`
     api(`/api/sales${q}`).then(setSales).catch(() => setSales([]))
     api(`/api/participants${q}`).then(setParticipants).catch(() => setParticipants([]))
+    api(`/api/products${q}&activeOnly=false`).then(setProducts).catch(() => setProducts([]))
   }, [statsCampId])
 
   // ---- everything below is computed from the loaded lists -------------------
@@ -115,9 +120,44 @@ export default function Admin() {
 
   const statsCamp = camps.find((c) => c.id === statsCampId)
 
+  // The four things a camp needs before the stand can sell. Sellers/leads are the
+  // people who actually staff it, so an admin on their own doesn't count as "team".
+  const setupSteps = [
+    {
+      label: 'Camp anlegen',
+      hint: 'Name, Stadt und Zeitraum des Lagers',
+      cta: 'Camp anlegen',
+      done: camps.length > 0,
+      action: () => setShowCampForm(true),
+    },
+    {
+      label: 'Team einladen',
+      hint: 'Verkäufer:innen und Stand-Leitung anlegen',
+      cta: 'Benutzer anlegen',
+      done: users.some((u) => ['SELLER', 'SELLER_LEAD'].includes(u.role)),
+      action: () => setShowUserForm(true),
+    },
+    {
+      label: 'Produkte anlegen',
+      hint: 'Was verkauft wird, mit Preis und Kategorie',
+      cta: 'Zu den Produkten',
+      done: products.length > 0,
+      action: () => navigate('/products'),
+    },
+    {
+      label: 'Teilnehmer anlegen',
+      hint: 'Wer im Lager einkaufen kann',
+      cta: 'Zu den Teilnehmern',
+      done: participants.length > 0,
+      action: () => navigate('/participants'),
+    },
+  ]
+
   return (
     <div className="space-y-6">
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+
+      <SetupChecklist steps={setupSteps} />
 
       {/* ---------------------------------------------------------- overview */}
       <section>

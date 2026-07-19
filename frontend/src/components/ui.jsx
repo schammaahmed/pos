@@ -55,12 +55,19 @@ export function StatCard({ label, value, hint, tone = 'neutral', icon: Icon }) {
   )
 }
 
-// consistent "nothing here yet" block instead of a bare grey sentence
-export function EmptyState({ icon: Icon, children }) {
+// Consistent "nothing here yet" block. An empty screen should never be a dead end,
+// so it can carry the action that fills it.
+export function EmptyState({ icon: Icon, children, hint, action, cta }) {
   return (
-    <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-400 text-sm">
+    <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center">
       {Icon && <Icon className="w-10 h-10 mx-auto mb-2 text-gray-300" />}
-      {children}
+      <div className="text-sm text-gray-500">{children}</div>
+      {hint && <div className="text-xs text-gray-400 mt-1">{hint}</div>}
+      {action && cta && (
+        <button onClick={action} className="mt-4 bg-primary text-white rounded-lg px-4 py-2 text-sm font-semibold">
+          {cta}
+        </button>
+      )}
     </div>
   )
 }

@@ -42,10 +42,21 @@
   }
 }
 
-/* system font stack - loads instantly, looks native on every device */
+/* Plus Jakarta Sans (self-hosted, imported in main.jsx). The system stack is kept
+   as a fallback so text still renders if the font file ever fails to load. */
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background-color: var(--color-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* headings and figures read better slightly tighter in this typeface */
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+}
+/* tabular figures keep prices and totals from jittering as they change */
+.tabular-nums-fix {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Slim, rounded scrollbars that match the surface colours instead of the default

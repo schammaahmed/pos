@@ -57,7 +57,14 @@ export default function Products() {
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
       {products.length === 0 ? (
-        <EmptyState icon={Package}>Noch keine Produkte.</EmptyState>
+        <EmptyState
+          icon={Package}
+          hint={canEdit ? 'Lege an, was am Stand verkauft wird – Name, Preis und Kategorie.' : undefined}
+          action={canEdit ? () => setEditing('new') : undefined}
+          cta="Erstes Produkt anlegen"
+        >
+          Noch keine Produkte.
+        </EmptyState>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {products.map((p) => (
