@@ -39,6 +39,7 @@ public class SaleDtos {
             Long id,
             Long participantId,
             String participantName,    // null for anonymous sales
+            Long sellerId,             // lets the UI show everything one team member did
             String sellerName,
             List<SaleItemResponse> items,
             BigDecimal totalAmount,
@@ -58,6 +59,7 @@ public class SaleDtos {
                     sale.getParticipant() != null ? sale.getParticipant().getId() : null,
                     sale.getParticipant() != null
                             ? sale.getParticipant().getFirstName() + " " + sale.getParticipant().getLastName() : null,
+                    sale.getSeller().getId(),
                     sale.getSeller().getFirstName() + " " + sale.getSeller().getLastName(),
                     sale.getItems().stream().map(SaleItemResponse::from).toList(),
                     sale.getTotalAmount(),

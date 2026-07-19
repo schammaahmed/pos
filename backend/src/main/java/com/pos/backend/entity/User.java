@@ -51,6 +51,10 @@ public class User {
     @Column(nullable = false, columnDefinition = "boolean not null default false")
     private boolean mustChangePassword = false;
 
+    // null = invited but never signed in yet. Lets an admin see at a glance whether
+    // someone has actually picked up their invite.
+    private LocalDateTime lastLoginAt;
+
     @Column(updatable = false)
     private LocalDateTime createdAt;
 

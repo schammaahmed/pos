@@ -12,6 +12,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -31,6 +33,10 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             throw badCredentials();
         }
+
+        // record that the invite was actually picked up (and keep it fresh afterwards)
+        user.setLastLoginAt(LocalDateTime.now());
+        userRepository.save(user);
 
         String token = jwtService.generateToken(user.getEmail(), user.getRole().name());
         return new LoginResponse(token, user.getId(), user.getFirstName(), user.getLastName(), user.getRole().name(),

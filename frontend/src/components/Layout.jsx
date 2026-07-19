@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
-import { ClipboardCheck, LogOut, Menu, Package, Settings, ShoppingCart, Users } from 'lucide-react'
+import { ClipboardCheck, LogOut, Menu, Package, Receipt, Settings, ShoppingCart, Users } from 'lucide-react'
 import { useAuth, isLead } from '../auth'
 import AccountMenu from './AccountMenu'
 import ChangePassword from './ChangePassword'
@@ -63,6 +63,7 @@ export default function Layout() {
     ...(user.role !== 'SUPER_ADMIN' ? [{ to: '/sell', label: 'Verkaufen', Icon: ShoppingCart }] : []),
     { to: '/participants', label: 'Teilnehmer', Icon: Users },
     { to: '/products', label: 'Produkte', Icon: Package },
+    ...(isLead(user) ? [{ to: '/sales', label: 'Verkäufe', Icon: Receipt }] : []),
     ...(isLead(user) && user.role !== 'SUPER_ADMIN' ? [{ to: '/review', label: 'Prüfen', Icon: ClipboardCheck }] : []),
     ...(['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role) ? [{ to: '/admin', label: 'Admin', Icon: Settings }] : []),
   ]

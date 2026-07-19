@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../components/Dialog'
 import SetupChecklist from '../components/SetupChecklist'
 import StatDetailDialog from '../components/StatDetailDialog'
 import InviteCard from '../components/InviteCard'
+import TeamMemberDialog from '../components/TeamMemberDialog'
 import { Avatar, Badge, EmptyState, SectionHeader, StatCard } from '../components/ui'
 import { fmt } from '../money'
 
@@ -28,6 +29,7 @@ export default function Admin() {
   const [showUserForm, setShowUserForm] = useState(false)
   const [campToClose, setCampToClose] = useState(null) // camp awaiting the close confirmation
   const [detail, setDetail] = useState(null) // which stat tile is drilled into
+  const [member, setMember] = useState(null) // team member whose activity is open
   const [invite, setInvite] = useState(null) // credentials sheet for a freshly created user
   // which camp the figures refer to. A camp admin only ever has their own; a super
   // admin has none of their own, so they pick one (defaults to the first active camp).
@@ -404,18 +406,28 @@ export default function Admin() {
         <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
           {users.map((u) => (
             <div key={u.id} className={`p-3 flex items-center gap-3 hover:bg-gray-50 ${u.active ? '' : 'opacity-60'}`}>
-              <Avatar name={`${u.firstName} ${u.lastName}`} size="sm" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium flex items-center gap-2">
-                  <span className="truncate">{u.firstName} {u.lastName}</span>
-                  {u.id === user.id && <Badge tone="info">Du</Badge>}
-                  {!u.active && <Badge tone="accent">deaktiviert</Badge>}
+              {/* the row itself opens the person's activity */}
+              <button onClick={() => setMember(u)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                <Avatar name={`${u.firstName} ${u.lastName}`} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium flex items-center gap-2 flex-wrap">
+                    <span className="truncate">{u.firstName} {u.lastName}</span>
+                    {u.id === user.id && <Badge tone="info">Du</Badge>}
+                    {!u.active
+                      ? <Badge tone="accent">deaktiviert</Badge>
+                      : u.lastLoginAt
+                        ? <Badge tone="success">aktiv</Badge>
+                        : <Badge tone="warning">eingeladen</Badge>}
+                  </div>
+                  <div className="text-sm text-gray-500 truncate">
+                    {roleLabel(u.role)}
+                    {u.campName ? ` · ${u.campName}` : ''}
+                    {u.lastLoginAt
+                      ? ` · zuletzt ${new Date(u.lastLoginAt).toLocaleDateString('de-AT')}`
+                      : ' · noch nie angemeldet'}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500 truncate">
-                  {roleLabel(u.role)}
-                  {u.campName ? ` · ${u.campName}` : ''}
-                </div>
-              </div>
+              </button>
               {u.id !== user.id && (
                 <button onClick={() => toggleUser(u)} className="text-sm border rounded-lg px-3 py-2 hover:bg-gray-100 shrink-0">
                   {u.active ? 'Deaktivieren' : 'Aktivieren'}
@@ -449,6 +461,8 @@ export default function Admin() {
       )}
 
       {invite && <InviteCard invite={invite} onClose={() => setInvite(null)} />}
+
+      {member && <TeamMemberDialog member={member} sales={sales} onClose={() => setMember(null)} />}
     </div>
   )
 }

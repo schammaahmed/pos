@@ -153,7 +153,23 @@ public class SaleService {
         return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
     }
 
-    // the lead ticks off a flagged reversal after checking it was legitimate
+    // Mark a sale for the lead to look at, WITHOUT undoing it. Until now the only way
+    // to raise a concern was to reverse the sale, which is destructive: a seller who
+    // was merely unsure had to undo a possibly-correct sale to get attention.
+    @Transactional
+    public SaleResponse flagForReview(User currentUser, Long saleId) {
+        Sale sale = saleRepository.findById(saleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found"));
+        campAccess.checkSameCamp(currentUser, sale.getCamp());
+
+        if (sale.isFlaggedForReview()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This sale is already flagged for review");
+        }
+        sale.setFlaggedForReview(true);
+        return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
+    }
+
+    // the lead ticks off a flagged sale after checking it was legitimate
     @Transactional
     public SaleResponse approveReversal(User currentUser, Long saleId) {
         Sale sale = saleRepository.findById(saleId)
@@ -185,7 +201,7 @@ public class SaleService {
 
     public List<SaleResponse> flagged(User currentUser, Long campId) {
         Camp camp = campAccess.resolveCamp(currentUser, campId);
-        return saleRepository.findByCampIdAndFlaggedForReviewTrueOrderByReversedAtDesc(camp.getId())
+        return saleRepository.findByCampIdAndFlaggedForReviewTrueOrderByCreatedAtDesc(camp.getId())
                 .stream().map(s -> SaleResponse.from(s, BigDecimal.ZERO)).toList();
     }
 }
