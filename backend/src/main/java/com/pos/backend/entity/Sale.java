@@ -72,6 +72,14 @@ public class Sale {
     @Column(nullable = false)
     private boolean flaggedForReview = false;
 
+    // who raised the concern and when - without this a flag is untraceable
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "flagged_by")
+    private User flaggedBy;
+
+    private LocalDateTime flaggedAt;
+
     @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reversed_by")

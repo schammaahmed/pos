@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
-import { ClipboardCheck, LogOut, Menu, Package, Receipt, Settings, ShoppingCart, Users } from 'lucide-react'
+import { ClipboardCheck, LogOut, Menu, Package, Receipt, ShieldUser, ShoppingCart, Users } from 'lucide-react'
 import { useAuth, isLead } from '../auth'
 import AccountMenu from './AccountMenu'
 import ChangePassword from './ChangePassword'
@@ -63,9 +63,12 @@ export default function Layout() {
     ...(user.role !== 'SUPER_ADMIN' ? [{ to: '/sell', label: 'Verkaufen', Icon: ShoppingCart }] : []),
     { to: '/participants', label: 'Teilnehmer', Icon: Users },
     { to: '/products', label: 'Produkte', Icon: Package },
-    ...(isLead(user) ? [{ to: '/sales', label: 'Verkäufe', Icon: Receipt }] : []),
+    // sellers see the log too: they may not undo anything, but they can flag a sale
+    // they are unsure about so the lead checks it
+    { to: '/sales', label: 'Verkäufe', Icon: Receipt },
     ...(isLead(user) && user.role !== 'SUPER_ADMIN' ? [{ to: '/review', label: 'Prüfen', Icon: ClipboardCheck }] : []),
-    ...(['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role) ? [{ to: '/admin', label: 'Admin', Icon: Settings }] : []),
+    // ShieldUser, not a gear: this is the admin area, not app settings
+    ...(['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role) ? [{ to: '/admin', label: 'Admin', Icon: ShieldUser }] : []),
   ]
 
   const dateLine =

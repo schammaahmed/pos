@@ -135,6 +135,17 @@ public class SaleService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This sale is already reversed");
         }
 
+        // A booking is never destroyed on a whim: it has to be raised for review first,
+        // and only the stand leadership may then undo it. Sellers flag, leads decide.
+        if (currentUser.getRole() == Role.SELLER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Nur die Stand-Leitung kann stornieren – bitte den Verkauf zur Prüfung markieren.");
+        }
+        if (!sale.isFlaggedForReview()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Dieser Verkauf muss zuerst zur Prüfung markiert werden, bevor er storniert werden kann.");
+        }
+
         // undo the balance effect: give back what was taken (balance + debt), take back what was gifted (credit)
         Participant participant = sale.getParticipant();
         if (participant != null) {
@@ -148,7 +159,9 @@ public class SaleService {
         sale.setStatus(Sale.Status.REVERSED);
         sale.setReversedBy(currentUser);
         sale.setReversedAt(LocalDateTime.now());
-        sale.setFlaggedForReview(currentUser.getRole() == Role.SELLER); // leads/admins reverse without flag
+        // the concern has been dealt with by the reversal itself, so it leaves the queue
+        sale.setFlaggedForReview(false);
+        sale.setReviewedBy(currentUser);
 
         return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
     }
@@ -166,6 +179,8 @@ public class SaleService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This sale is already flagged for review");
         }
         sale.setFlaggedForReview(true);
+        sale.setFlaggedBy(currentUser);   // so the lead can ask the right person about it
+        sale.setFlaggedAt(LocalDateTime.now());
         return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
     }
 

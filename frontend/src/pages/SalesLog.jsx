@@ -210,6 +210,19 @@ function SaleRow({ sale, card, canReview, busy, onFlag, onReverse }) {
         <div className="text-[11px] text-gray-400">
           {when.toLocaleDateString('de-AT')} {when.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })} · {sale.sellerName}
         </div>
+        {/* who raised the concern / who undid it - a flag has to be traceable */}
+        {sale.flaggedForReview && sale.flaggedByName && (
+          <div className="text-[11px] text-warning">
+            markiert von {sale.flaggedByName}
+            {sale.flaggedAt && ` · ${new Date(sale.flaggedAt).toLocaleString('de-AT')}`}
+          </div>
+        )}
+        {reversed && sale.reversedByName && (
+          <div className="text-[11px] text-accent">
+            storniert von {sale.reversedByName}
+            {sale.reversedAt && ` · ${new Date(sale.reversedAt).toLocaleString('de-AT')}`}
+          </div>
+        )}
       </div>
 
       <div className="text-right shrink-0">
@@ -227,8 +240,10 @@ function SaleRow({ sale, card, canReview, busy, onFlag, onReverse }) {
             <Flag className="w-4 h-4" />
           </button>
         )}
-        {canReview && !reversed && (
-          <button onClick={onReverse} disabled={busy} title="Stornieren"
+        {/* Stornieren only after the sale was raised for review - and only for leads.
+            Sellers flag; the leadership decides. */}
+        {canReview && !reversed && sale.flaggedForReview && (
+          <button onClick={onReverse} disabled={busy} title="Stornieren (geprüft)"
                   className="border rounded-lg p-2 text-accent hover:bg-accent-soft disabled:opacity-40">
             <RotateCcw className="w-4 h-4" />
           </button>

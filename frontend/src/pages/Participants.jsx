@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { FileSpreadsheet, Search, TrendingDown, UserRound, Users, Wallet } from 'lucide-react'
 import { api } from '../api'
 import { useAuth, isLead } from '../auth'
@@ -190,19 +190,42 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
 
   const debt = Math.abs(Number(participant.balance))
 
+  // their usual order, counted across everything they actually bought
+  const topItems = useMemo(() => {
+    const counts = new Map()
+    for (const sale of sales ?? []) {
+      if (sale.status === 'REVERSED') continue // a reversed sale never happened
+      for (const item of sale.items) {
+        counts.set(item.productName, (counts.get(item.productName) ?? 0) + item.quantity)
+      }
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4)
+  }, [sales])
+
   return (
     <div>
-      <button onClick={onToggle} className="w-full flex justify-between items-center gap-3 p-4 hover:bg-gray-50 text-left">
-        <span className="font-medium truncate">
-          {participant.firstName} {participant.lastName}
-        </span>
-        <span className="flex items-center gap-2 shrink-0">
-          {participant.inDebt && <Badge tone="accent">Schulden</Badge>}
-          <span className={participant.inDebt ? 'text-accent font-semibold' : 'text-primary'}>
-            {participant.inDebt ? fmt(debt) : fmt(participant.balance)}
+      <div className="flex items-center gap-2 pr-3 hover:bg-gray-50">
+        <button onClick={onToggle} className="flex-1 flex justify-between items-center gap-3 p-4 text-left min-w-0">
+          <span className="font-medium truncate">
+            {participant.firstName} {participant.lastName}
           </span>
-        </span>
-      </button>
+          <span className="flex items-center gap-2 shrink-0">
+            {participant.inDebt && <Badge tone="accent">Schulden</Badge>}
+            <span className={participant.inDebt ? 'text-accent font-semibold' : 'text-primary'}>
+              {participant.inDebt ? fmt(debt) : fmt(participant.balance)}
+            </span>
+          </span>
+        </button>
+
+        {/* Settling used to be hidden inside the expanded row, so it looked missing.
+            For anyone in debt it now sits on the row itself - one click, no digging. */}
+        {canSettle && participant.inDebt && (
+          <button onClick={() => setDialog('settle')}
+                  className="shrink-0 border border-accent text-accent rounded-lg px-3 py-2 text-xs font-semibold hover:bg-accent-soft">
+            Begleichen
+          </button>
+        )}
+      </div>
 
       {open && (
         <div className="px-4 pb-4 space-y-3">
@@ -241,31 +264,73 @@ function ParticipantRow({ participant, open, onToggle, canSettle, onChanged }) {
             />
           )}
 
-          {/* purchase history */}
+          {/* Was this person's usual? Comes straight out of their own purchases. */}
+          {topItems.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 mb-1.5">LIEBLINGSPRODUKTE</div>
+              <div className="flex flex-wrap gap-1.5">
+                {topItems.map(([name, qty]) => (
+                  <span key={name} className="bg-primary-soft text-primary text-xs rounded-full px-2.5 py-1 font-medium">
+                    {name} · {qty}×
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Purchase history: one card per sale with the items stacked underneath,
+              instead of everything squeezed onto a single line. */}
           {sales?.length > 0 && (
-            <div className="text-sm space-y-1">
-              <div className="font-semibold text-gray-600">Einkäufe</div>
-              {sales.map((s) => (
-                <div key={s.id} className={`flex justify-between ${s.status === 'REVERSED' ? 'line-through text-gray-400' : ''}`}>
-                  <span>{s.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')}</span>
-                  <span>{fmt(s.totalAmount)}</span>
-                </div>
-              ))}
+            <div>
+              <div className="text-xs font-semibold text-gray-500 mb-1.5">EINKÄUFE</div>
+              <div className="bg-gray-50 rounded-lg divide-y divide-gray-200 overflow-hidden">
+                {sales.map((s) => (
+                  <div key={s.id} className={`p-3 ${s.status === 'REVERSED' ? 'opacity-50' : ''}`}>
+                    <div className="flex justify-between items-start gap-3">
+                      <span className="text-xs text-gray-500">
+                        {new Date(s.createdAt).toLocaleString('de-AT')} · {s.sellerName}
+                      </span>
+                      <span className={`font-semibold shrink-0 ${s.status === 'REVERSED' ? 'line-through' : ''}`}>
+                        {fmt(s.totalAmount)}
+                      </span>
+                    </div>
+                    <ul className="mt-1 space-y-0.5">
+                      {s.items.map((i, idx) => (
+                        <li key={idx} className={`text-sm flex justify-between ${s.status === 'REVERSED' ? 'line-through' : ''}`}>
+                          <span>{i.quantity}× {i.productName}</span>
+                          <span className="text-gray-500">{fmt(i.lineTotal)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {(s.status === 'REVERSED' || s.flaggedForReview) && (
+                      <div className="mt-1.5 flex gap-1.5">
+                        {s.status === 'REVERSED' && <Badge tone="neutral">storniert</Badge>}
+                        {s.flaggedForReview && <Badge tone="warning">zu prüfen</Badge>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {/* deposits & settlements */}
           {history?.length > 0 && (
-            <div className="text-sm space-y-1">
-              <div className="font-semibold text-gray-600">Ein-/Auszahlungen</div>
-              {history.map((h) => (
-                <div key={h.id} className="flex justify-between">
-                  <span>
-                    {h.type === 'DEPOSIT' ? 'Einzahlung' : 'Schulden beglichen'} · {h.performedBy}
-                  </span>
-                  <span>{fmt(h.amount)}</span>
-                </div>
-              ))}
+            <div>
+              <div className="text-xs font-semibold text-gray-500 mb-1.5">EIN-/AUSZAHLUNGEN</div>
+              <div className="bg-gray-50 rounded-lg divide-y divide-gray-200 overflow-hidden">
+                {history.map((h) => (
+                  <div key={h.id} className="flex justify-between items-center p-3 text-sm">
+                    <span>
+                      {h.type === 'DEPOSIT' ? 'Einzahlung' : 'Schulden beglichen'}
+                      <span className="block text-xs text-gray-500">
+                        {new Date(h.createdAt).toLocaleString('de-AT')} · {h.performedBy}
+                      </span>
+                    </span>
+                    <span className="font-semibold">{fmt(h.amount)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
