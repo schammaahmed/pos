@@ -25,6 +25,8 @@ replay_pid*
 
 .env
 application.properties
+# sandbox profile: holds credentials, template is application-test.properties.example
+application-test.properties
 *.csv
 *.xlsx
 *.cmd
