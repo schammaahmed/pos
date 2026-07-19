@@ -4,6 +4,7 @@ import { ClipboardCheck, LogOut, Menu, Package, Settings, ShoppingCart, Users } 
 import { useAuth, isLead } from '../auth'
 import AccountMenu from './AccountMenu'
 import ChangePassword from './ChangePassword'
+import OnboardingTour, { hasSeenTour } from './OnboardingTour'
 
 const SIDEBAR_KEY = 'pos_sidebar_collapsed'
 
@@ -14,8 +15,15 @@ const SIDEBAR_KEY = 'pos_sidebar_collapsed'
 export default function Layout() {
   const { user, logout } = useAuth()
   const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [showTour, setShowTour] = useState(false)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1')
   const [now, setNow] = useState(() => new Date())
+
+  // First login: show the guide once the user is past the forced password change,
+  // so they aren't hit with two overlays at the same time.
+  useEffect(() => {
+    if (user && !user.mustChangePassword && !hasSeenTour(user)) setShowTour(true)
+  }, [user?.id, user?.mustChangePassword]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // keep the clock in the top bar roughly current without re-rendering constantly
   useEffect(() => {
@@ -85,7 +93,10 @@ export default function Layout() {
 
         {/* right: one account menu holding greeting, password and sign out */}
         <div className="ml-auto md:ml-0 flex items-center shrink-0 md:w-56 md:justify-end">
-          <AccountMenu onChangePassword={() => setShowPasswordForm(true)} />
+          <AccountMenu
+            onChangePassword={() => setShowPasswordForm(true)}
+            onShowGuide={() => setShowTour(true)}
+          />
         </div>
       </header>
 
@@ -125,6 +136,7 @@ export default function Layout() {
       </main>
 
       {showPasswordForm && <ChangePassword onClose={() => setShowPasswordForm(false)} />}
+      {showTour && <OnboardingTour user={user} onClose={() => setShowTour(false)} />}
 
       {/* ---------------------------------------------------------------- bottom tabs (mobile) */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 flex z-30">

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, KeyRound, LogOut } from 'lucide-react'
+import { ChevronDown, HelpCircle, KeyRound, LogOut } from 'lucide-react'
 import { useAuth, roleLabel } from '../auth'
 
 // Account/settings menu in the top bar. Replaces the lone key icon: everything
 // personal (who am I, password, sign out) lives behind one predictable button.
-export default function AccountMenu({ onChangePassword }) {
+export default function AccountMenu({ onChangePassword, onShowGuide }) {
   const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -57,6 +57,17 @@ export default function AccountMenu({ onChangePassword }) {
               {user.campName ? ` · ${user.campName}` : ''}
             </div>
           </div>
+
+          {/* the first-login guide stays reachable - it is not a one-shot */}
+          <button
+            onClick={() => {
+              setOpen(false)
+              onShowGuide()
+            }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50"
+          >
+            <HelpCircle className="w-4 h-4 text-gray-400" /> Einführung ansehen
+          </button>
 
           <button
             onClick={() => {

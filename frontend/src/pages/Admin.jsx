@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Crown, Euro, Lightbulb, Package, Receipt, TrendingDown, Trophy, UserRound, Users,
+  Banknote, Crown, Euro, Lightbulb, Package, Receipt, TrendingDown, Trophy, UserRound, Users,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -205,9 +205,19 @@ export default function Admin() {
           <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
             {stats.recent.map((s) => (
               <div key={s.id} className="flex items-center gap-3 p-3">
-                <Avatar name={s.participantName || 'Barverkauf'} />
+                {/* an anonymous cash sale is NOT a person - a name avatar reading "B"
+                    made "Barverkauf" look like a participant called Barverkauf */}
+                {s.participantName ? (
+                  <Avatar name={s.participantName} />
+                ) : (
+                  <span className="w-10 h-10 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center shrink-0">
+                    <Banknote className="w-5 h-5" />
+                  </span>
+                )}
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{s.participantName || 'Barverkauf'}</div>
+                  <div className="font-medium truncate">
+                    {s.participantName ?? <span className="text-gray-500 italic font-normal">Barverkauf</span>}
+                  </div>
                   <div className="text-xs text-gray-500 truncate">
                     {s.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')}
                   </div>

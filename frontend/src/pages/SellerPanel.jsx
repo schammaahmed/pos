@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Minus, Package, Plus, Search, ShoppingCart, Trash2, UserRound, X } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Minimize2, Minus, Package, Plus, Search, ShoppingCart, Trash2, UserRound, X } from 'lucide-react'
 import { api } from '../api'
 import { fmt, fromCents, toCents } from '../money'
 import ParticipantPickerSheet, { rememberRecentParticipant } from '../components/ParticipantPickerSheet'
+
+// the size the basket ships with, and what "Originalgröße" restores
+const DEFAULT_SHEET_VH = 60
+const DEFAULT_PANEL_PX = 400
 
 // The heart of the POS. Flow: pick participant (or anonymous) -> tap products into
 // the cart -> "Zur Kasse" -> review basket + choose how it's paid -> confirm.
@@ -18,8 +22,8 @@ export default function SellerPanel() {
   const [error, setError] = useState(null)
   // How big the basket is. The seller drags it: height (vh) as a bottom sheet on a
   // phone, width (px) as a side panel on a laptop. Remembered per device.
-  const [sheetVh, setSheetVh] = useState(() => Number(localStorage.getItem('pos_basket_vh')) || 60)
-  const [panelPx, setPanelPx] = useState(() => Number(localStorage.getItem('pos_basket_px')) || 400)
+  const [sheetVh, setSheetVh] = useState(() => Number(localStorage.getItem('pos_basket_vh')) || DEFAULT_SHEET_VH)
+  const [panelPx, setPanelPx] = useState(() => Number(localStorage.getItem('pos_basket_px')) || DEFAULT_PANEL_PX)
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 768px)').matches)
 
   // the panel switches between the two dimensions at the md breakpoint
@@ -39,6 +43,19 @@ export default function SellerPanel() {
       localStorage.setItem('pos_basket_vh', String(next))
     }
   }
+
+  // back to the size it ships with, for when a drag went wrong
+  function resetBasketSize() {
+    if (isDesktop) {
+      setPanelPx(DEFAULT_PANEL_PX)
+      localStorage.removeItem('pos_basket_px')
+    } else {
+      setSheetVh(DEFAULT_SHEET_VH)
+      localStorage.removeItem('pos_basket_vh')
+    }
+  }
+
+  const isCustomSize = isDesktop ? panelPx !== DEFAULT_PANEL_PX : sheetVh !== DEFAULT_SHEET_VH
 
   useEffect(() => {
     api('/api/products').then(setProducts).catch((e) => setError(e.message))
@@ -171,6 +188,7 @@ export default function SellerPanel() {
           isDesktop={isDesktop}
           size={isDesktop ? panelPx : sheetVh}
           onResize={resizeBasket}
+          onResetSize={isCustomSize ? resetBasketSize : null}
         />
       )}
 
@@ -321,7 +339,7 @@ function ProductGrid({ products, cart, onAdd, onChangeQty }) {
 // ---------------------------------------------------------------- basket / checkout
 // Docked rather than full-screen so the product grid stays visible and reachable:
 // a right-hand panel on a laptop, a bottom sheet on a phone.
-function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold, isDesktop, size, onResize }) {
+function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold, isDesktop, size, onResize, onResetSize }) {
   const [cashInput, setCashInput] = useState('') // what the buyer hands over, as typed
   // The seller must ACTIVELY choose one method - no default. Each method is a single, clear
   // intent, so cash and balance can never silently fight each other (the old bug).
@@ -439,11 +457,20 @@ function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPick
         <h2 className="text-lg font-bold flex items-center gap-2">
           <ShoppingCart className="w-5 h-5 text-primary" /> Warenkorb
         </h2>
-        <button onClick={onClose} title="Schließen"
-                className="text-gray-500 border rounded-lg px-3 py-2 flex items-center gap-1 hover:bg-gray-50">
-          <ArrowLeft className="w-4 h-4 md:hidden" />
-          <X className="w-4 h-4 hidden md:block" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* only offered once the basket has actually been dragged off its default */}
+          {onResetSize && (
+            <button onClick={onResetSize} title="Originalgröße wiederherstellen"
+                    className="text-gray-500 border rounded-lg p-2 hover:bg-gray-50">
+              <Minimize2 className="w-4 h-4" />
+            </button>
+          )}
+          <button onClick={onClose} title="Schließen"
+                  className="text-gray-500 border rounded-lg px-3 py-2 flex items-center gap-1 hover:bg-gray-50">
+            <ArrowLeft className="w-4 h-4 md:hidden" />
+            <X className="w-4 h-4 hidden md:block" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
