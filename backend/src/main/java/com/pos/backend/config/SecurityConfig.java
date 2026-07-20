@@ -2,6 +2,7 @@ package com.pos.backend.config;
 
 import com.pos.backend.security.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -55,12 +56,17 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // The React dev server runs on another port (5173), and browsers block cross-origin
-    // requests unless the server explicitly allows them. This does exactly that.
+    // The React dev server runs on another port, and browsers block cross-origin
+    // requests unless the server explicitly allows them. Configurable so the sandbox
+    // UI (5174) and later the deployed domain can be allowed without a code change:
+    //   app.cors.allowed-origins=https://verkaufsstand.example
+    @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:5174}")
+    private String allowedOrigins;
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedOrigins(List.of(allowedOrigins.split("\\s*,\\s*")));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
 
