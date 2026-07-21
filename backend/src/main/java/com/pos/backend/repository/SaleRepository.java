@@ -28,4 +28,12 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             WHERE s.camp.id = :campId AND s.status = com.pos.backend.entity.Sale$Status.COMPLETED
             """)
     BigDecimal sumPaidCashByCamp(@Param("campId") Long campId);
+
+    // Total takings (whatever way it was paid) for the super-admin overview. COMPLETED
+    // only, so reversed sales don't inflate the figure.
+    @Query("""
+            SELECT COALESCE(SUM(s.totalAmount), 0) FROM Sale s
+            WHERE s.camp.id = :campId AND s.status = com.pos.backend.entity.Sale$Status.COMPLETED
+            """)
+    BigDecimal sumRevenueByCamp(@Param("campId") Long campId);
 }
