@@ -3,6 +3,7 @@ package com.pos.backend.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -33,6 +34,12 @@ public class Camp {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CampStatus status = CampStatus.ACTIVE;
+
+    // The float the cash box starts the camp with (Wechselgeld). All cash-box maths
+    // start from here. columnDefinition keeps ddl-auto happy on existing rows.
+    @Column(nullable = false, precision = 10, scale = 2,
+            columnDefinition = "numeric(10,2) not null default 0")
+    private BigDecimal startingCash = BigDecimal.ZERO;
 
     @Column(updatable = false)
     private LocalDateTime createdAt;

@@ -7,6 +7,7 @@ import { api } from '../api'
 import { useAuth, roleLabel } from '../auth'
 import { ConfirmDialog } from '../components/Dialog'
 import SetupChecklist from '../components/SetupChecklist'
+import CashBox from '../components/CashBox'
 import StatDetailDialog from '../components/StatDetailDialog'
 import InviteCard from '../components/InviteCard'
 import TeamMemberDialog from '../components/TeamMemberDialog'
@@ -31,9 +32,18 @@ export default function Admin() {
   const [detail, setDetail] = useState(null) // which stat tile is drilled into
   const [member, setMember] = useState(null) // team member whose activity is open
   const [invite, setInvite] = useState(null) // credentials sheet for a freshly created user
-  // which camp the figures refer to. A camp admin only ever has their own; a super
-  // admin has none of their own, so they pick one (defaults to the first active camp).
-  const [statsCampId, setStatsCampId] = useState(user.campId ?? null)
+  // Which camp the figures (and the cash box) refer to. A camp admin only ever has
+  // their own; a super admin has none, so they pick one. The choice is remembered
+  // per device, otherwise it snaps back to the default on every remount.
+  const [statsCampId, setStatsCampId] = useState(() => {
+    const saved = Number(localStorage.getItem('pos_admin_camp'))
+    return user.campId ?? (saved || null)
+  })
+
+  function chooseCamp(id) {
+    setStatsCampId(id)
+    localStorage.setItem('pos_admin_camp', String(id))
+  }
 
   async function reload() {
     try {
@@ -48,10 +58,12 @@ export default function Admin() {
     reload()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // super admin: once camps are loaded, default the dashboard to an active camp
+  // super admin: once camps are loaded, default to an active camp - but only if the
+  // remembered one no longer exists, so a valid saved choice is never overridden
   useEffect(() => {
-    if (statsCampId || camps.length === 0) return
-    setStatsCampId((camps.find((c) => c.status === 'ACTIVE') ?? camps[0]).id)
+    if (camps.length === 0) return
+    if (statsCampId && camps.some((c) => c.id === statsCampId)) return
+    chooseCamp((camps.find((c) => c.status === 'ACTIVE') ?? camps[0]).id)
   }, [camps, statsCampId])
 
   // load the figures for the selected camp
@@ -242,7 +254,7 @@ export default function Admin() {
           {isSuper && camps.length > 0 && (
             <select
               value={statsCampId ?? ''}
-              onChange={(e) => setStatsCampId(Number(e.target.value))}
+              onChange={(e) => chooseCamp(Number(e.target.value))}
               className="border rounded-lg px-3 py-2 text-sm bg-white"
             >
               {camps.map((c) => (
@@ -359,6 +371,9 @@ export default function Admin() {
         </section>
       </div>
 
+      {/* the physical cash box for the selected camp */}
+      {statsCampId && <CashBox campId={statsCampId} />}
+
       {/* camps - super admin manages, camp admin just sees their own */}
       <section className="space-y-2">
         <div className="flex justify-between items-center">
@@ -472,12 +487,19 @@ function CampForm({ onClose, onSaved }) {
   const [city, setCity] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [startingCash, setStartingCash] = useState('')
   const [error, setError] = useState(null)
 
   async function submit(event) {
     event.preventDefault()
     try {
-      await api('/api/camps', { method: 'POST', body: { name, city, startDate, endDate } })
+      await api('/api/camps', {
+        method: 'POST',
+        body: {
+          name, city, startDate, endDate,
+          startingCash: startingCash ? Number(startingCash.replace(',', '.')) : 0,
+        },
+      })
       onSaved()
       onClose()
     } catch (e) {
@@ -499,6 +521,11 @@ function CampForm({ onClose, onSaved }) {
         <label className="block text-sm text-gray-600">
           Bis
           <input required type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border rounded-lg px-3 py-3 mt-1" />
+        </label>
+        <label className="block text-sm text-gray-600">
+          Startgeld in der Kasse (Wechselgeld, optional)
+          <input inputMode="decimal" placeholder="z.B. 50,00" value={startingCash}
+                 onChange={(e) => setStartingCash(e.target.value)} className="w-full border rounded-lg px-3 py-3 mt-1" />
         </label>
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
