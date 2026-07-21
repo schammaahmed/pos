@@ -47,14 +47,14 @@ public class SaleController {
     }
 
     @GetMapping("/flagged")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
     public List<SaleResponse> flagged(@AuthenticationPrincipal User currentUser,
                                       @RequestParam(required = false) Long campId) {
         return saleService.flagged(currentUser, campId);
     }
 
     @PostMapping("/{id}/approve-reversal")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
     public SaleResponse approveReversal(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
         return saleService.approveReversal(currentUser, id);
     }

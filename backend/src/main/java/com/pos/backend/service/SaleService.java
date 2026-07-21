@@ -137,7 +137,7 @@ public class SaleService {
 
     // Reversing = undoing a mistaken sale. The sale row STAYS (audit trail), only its status flips
     // and the participant gets their money back. A plain SELLER's reversal is flagged so the
-    // SELLER_LEAD can double check it later (requirement: mistakes happen under stress).
+    // CAMP_LEAD can double check it later (requirement: mistakes happen under stress).
     @Transactional
     public SaleResponse reverse(User currentUser, Long saleId) {
         Sale sale = saleRepository.findById(saleId)

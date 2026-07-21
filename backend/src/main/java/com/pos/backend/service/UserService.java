@@ -29,18 +29,17 @@ public class UserService {
         if (currentUser.getRole() == Role.SUPER_ADMIN) {
             return userRepository.findAll().stream().map(UserResponse::from).toList();
         }
-        // CAMP_ADMIN: only the team of their own camp
+        // CAMP_LEAD: only the team of their own camp
         return userRepository.findByCampId(requireCampId(currentUser)).stream()
                 .map(UserResponse::from).toList();
     }
 
     public UserResponse create(User currentUser, CreateUserRequest request) {
-        // Rule 1: only SUPER_ADMIN may create admins. A CAMP_ADMIN creating another
-        // CAMP_ADMIN (or a SUPER_ADMIN!) would be privilege escalation.
-        if (currentUser.getRole() == Role.CAMP_ADMIN
-                && request.role() != Role.SELLER && request.role() != Role.SELLER_LEAD) {
+        // Rule 1: a CAMP_LEAD may only staff its own camp - it can create SELLERs and
+        // fellow CAMP_LEADs, but never a SUPER_ADMIN (that would be privilege escalation).
+        if (currentUser.getRole() == Role.CAMP_LEAD && request.role() == Role.SUPER_ADMIN) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Camp admins can only create sellers and seller leads");
+                    "Only a super admin can create super admins");
         }
 
         // Rule 2: everyone except SUPER_ADMIN must belong to a camp
@@ -53,8 +52,8 @@ public class UserService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Camp not found"));
         }
 
-        // Rule 3: a CAMP_ADMIN can only create users for their OWN camp
-        if (currentUser.getRole() == Role.CAMP_ADMIN
+        // Rule 3: a CAMP_LEAD can only create users for their OWN camp
+        if (currentUser.getRole() == Role.CAMP_LEAD
                 && !requireCampId(currentUser).equals(request.campId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only create users for your own camp");
         }
@@ -83,8 +82,8 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        // CAMP_ADMIN may only touch users of their own camp
-        if (currentUser.getRole() == Role.CAMP_ADMIN) {
+        // CAMP_LEAD may only touch users of their own camp
+        if (currentUser.getRole() == Role.CAMP_LEAD) {
             Long targetCampId = user.getCamp() != null ? user.getCamp().getId() : null;
             if (!requireCampId(currentUser).equals(targetCampId)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User belongs to another camp");
@@ -105,13 +104,14 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        if (currentUser.getRole() == Role.CAMP_ADMIN) {
+        if (currentUser.getRole() == Role.CAMP_LEAD) {
             Long targetCampId = user.getCamp() != null ? user.getCamp().getId() : null;
             if (!requireCampId(currentUser).equals(targetCampId)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User belongs to another camp");
             }
-            if (user.getRole() == Role.CAMP_ADMIN || user.getRole() == Role.SUPER_ADMIN) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Camp admins cannot delete admins");
+            // a lead can remove sellers, but not fellow leads or super admins
+            if (user.getRole() == Role.CAMP_LEAD || user.getRole() == Role.SUPER_ADMIN) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Camp leads cannot delete other leads or admins");
             }
         }
 

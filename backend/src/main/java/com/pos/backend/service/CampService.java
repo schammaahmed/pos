@@ -41,6 +41,9 @@ public class CampService {
         camp.setCity(request.city());
         camp.setStartDate(request.startDate());
         camp.setEndDate(request.endDate());
+        if (request.startingCash() != null) {
+            camp.setStartingCash(request.startingCash());
+        }
         return CampResponse.from(campRepository.save(camp));
     }
 
