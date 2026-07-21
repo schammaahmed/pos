@@ -16,8 +16,8 @@ export default function Login() {
     setBusy(true)
     try {
       const user = await login(email, password)
-      // everyone lands on the seller panel except the super admin (no camp -> admin area)
-      navigate(user.role === 'SUPER_ADMIN' ? '/admin' : '/sell')
+      // a super admin oversees every camp -> the cross-camp overview; everyone else sells
+      navigate(user.role === 'SUPER_ADMIN' ? '/overview' : '/sell')
     } catch (err) {
       setError(err.message)
     } finally {
