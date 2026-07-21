@@ -11,6 +11,10 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     List<Sale> findByParticipantIdOrderByCreatedAtDesc(Long participantId);
 
-    // the lead's review queue: reversals done by plain sellers, waiting for a second pair of eyes
-    List<Sale> findByCampIdAndFlaggedForReviewTrueOrderByReversedAtDesc(Long campId);
+    // guards user deletion: someone with sales must be deactivated, not removed
+    boolean existsBySellerId(Long sellerId);
+
+    // The lead's review queue. Ordered by createdAt, NOT reversedAt: a sale can now be
+    // flagged without being reversed, and those have no reversedAt at all (null sorts oddly).
+    List<Sale> findByCampIdAndFlaggedForReviewTrueOrderByCreatedAtDesc(Long campId);
 }

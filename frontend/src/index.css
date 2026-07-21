@@ -29,6 +29,58 @@
   --color-surface: #ffffff;       /* cards */
 }
 
+/* ---------------------------------------------------------------- themes ----
+   Tailwind v4 emits every @theme token as a CSS variable and its utilities read
+   those variables, so a theme is just a set of overrides on the html element.
+   That means `bg-white`, `text-gray-900` etc. re-theme themselves without
+   touching a single component: we remap the palette rather than every class.
+
+   Dark mode inverts the grey ramp (gray-900 becomes near-white) so existing
+   "dark text on white card" markup keeps the right contrast upside down. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-white: #171a21;   /* every white card surface */
+  --color-page: #0f1115;
+
+  --color-gray-50: #1b1f27;
+  --color-gray-100: #232833;
+  --color-gray-200: #2e3440;
+  --color-gray-300: #3d4552;
+  --color-gray-400: #737c8c;
+  --color-gray-500: #929aa8;
+  --color-gray-600: #aeb5c1;
+  --color-gray-700: #c8cdd6;
+  --color-gray-800: #e2e6eb;
+  --color-gray-900: #f4f6f8;
+
+  /* brand colours lifted so they stay legible on dark surfaces */
+  --color-primary: #2bb3c0;
+  --color-primary-soft: #12333a;
+  --color-accent: #f04d90;
+  --color-accent-soft: #3a1329;
+  --color-success: #29c08c;
+  --color-success-soft: #12332a;
+  --color-warning: #e0913f;
+  --color-warning-soft: #33260f;
+  --color-info: #8b9bf5;
+  --color-info-soft: #1e2340;
+}
+
+/* Warm rosé theme - same structure, softer and pinker. */
+:root[data-theme='rose'] {
+  --color-primary: #c2508b;
+  --color-primary-soft: #fbe6f0;
+  --color-primary-dark: #6c2a4c;
+  --color-accent: #8b5cf6;      /* violet reads as "special" against the pink */
+  --color-accent-soft: #f0e9fe;
+  --color-success: #10a37f;
+  --color-success-soft: #e2f7f1;
+  --color-info: #7c6bd8;
+  --color-info-soft: #efeafc;
+  --color-page: #fdf5f8;
+}
+
 /* Tailwind v4 changed the default border colour from gray-200 to currentColor,
    so every `border` and `divide-y` was drawing in the text colour - i.e. hard
    black lines between list rows. Restore a soft default for the whole app. */
@@ -42,10 +94,45 @@
   }
 }
 
-/* system font stack - loads instantly, looks native on every device */
+/* Plus Jakarta Sans (self-hosted, imported in main.jsx). The system stack is kept
+   as a fallback so text still renders if the font file ever fails to load. */
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background-color: var(--color-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* headings and figures read better slightly tighter in this typeface */
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+}
+/* tabular figures keep prices and totals from jittering as they change */
+.tabular-nums-fix {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Slim, rounded scrollbars that match the surface colours instead of the default
+   chunky grey ones. The transparent border + background-clip trick insets the
+   thumb so it looks like a floating pill rather than a full-width bar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gray-300) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-gray-300);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-gray-400);
 }
 
 /* Horizontal swipe rows (category tabs, chip rows): keep the scrolling, hide the

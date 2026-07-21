@@ -35,11 +35,18 @@ export function ViewToggle({ view, onChange }) {
 
 // One number in the summary strip at the top of a page. The coloured tile behind
 // the icon is what makes a row of these readable at a glance.
-export function StatCard({ label, value, hint, tone = 'neutral', icon: Icon }) {
+export function StatCard({ label, value, hint, tone = 'neutral', icon: Icon, onClick }) {
   const t = TONES[tone] ?? TONES.neutral
+  // clickable tiles open the rows behind the number - see StatDetailDialog
+  const Tag = onClick ? 'button' : 'div'
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-4 flex items-center gap-3">
+    <Tag
+      onClick={onClick}
+      className={`bg-white rounded-xl shadow-sm p-4 flex items-center gap-3 w-full text-left ${
+        onClick ? 'hover:shadow-md hover:ring-1 hover:ring-primary/30 transition cursor-pointer' : ''
+      }`}
+    >
       {Icon && (
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${t.tile}`}>
           <Icon className="w-5 h-5" />
@@ -51,16 +58,23 @@ export function StatCard({ label, value, hint, tone = 'neutral', icon: Icon }) {
         <div className={`text-lg font-bold ${tone === 'neutral' ? 'text-gray-900' : t.text}`}>{value}</div>
         {hint && <div className="text-[11px] text-gray-400 leading-tight">{hint}</div>}
       </div>
-    </div>
+    </Tag>
   )
 }
 
-// consistent "nothing here yet" block instead of a bare grey sentence
-export function EmptyState({ icon: Icon, children }) {
+// Consistent "nothing here yet" block. An empty screen should never be a dead end,
+// so it can carry the action that fills it.
+export function EmptyState({ icon: Icon, children, hint, action, cta }) {
   return (
-    <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-400 text-sm">
+    <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center">
       {Icon && <Icon className="w-10 h-10 mx-auto mb-2 text-gray-300" />}
-      {children}
+      <div className="text-sm text-gray-500">{children}</div>
+      {hint && <div className="text-xs text-gray-400 mt-1">{hint}</div>}
+      {action && cta && (
+        <button onClick={action} className="mt-4 bg-primary text-white rounded-lg px-4 py-2 text-sm font-semibold">
+          {cta}
+        </button>
+      )}
     </div>
   )
 }

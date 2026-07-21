@@ -1,0 +1,26 @@
+# Template for the sandbox profile. Copy to application-test.properties and adjust.
+#
+#   cp application-test.properties.example application-test.properties
+#   docker exec pos-db psql -U postgres -c "CREATE DATABASE posdb_test;"
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=test
+#
+# Point the frontend at it with:
+#   VITE_API_TARGET=http://localhost:8081 npm run dev -- --port 5174
+#
+# The real file is gitignored because it contains credentials.
+
+spring.datasource.url=jdbc:postgresql://localhost:5432/posdb_test
+spring.datasource.username=postgres
+spring.datasource.password=CHANGE_ME
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+
+server.port=8081
+
+app.jwt.secret=CHANGE_ME_at_least_32_characters_long
+app.jwt.expiration-ms=43200000
+
+server.error.include-message=always
+server.error.include-stacktrace=never

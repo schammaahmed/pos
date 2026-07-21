@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Crown, Euro, Lightbulb, Package, Receipt, TrendingDown, Trophy, UserRound, Users,
+  Banknote, Crown, Euro, Lightbulb, Package, Receipt, TrendingDown, Trophy, UserRound, Users,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth, roleLabel } from '../auth'
 import { ConfirmDialog } from '../components/Dialog'
+import SetupChecklist from '../components/SetupChecklist'
+import StatDetailDialog from '../components/StatDetailDialog'
+import InviteCard from '../components/InviteCard'
+import TeamMemberDialog from '../components/TeamMemberDialog'
 import { Avatar, Badge, EmptyState, SectionHeader, StatCard } from '../components/ui'
 import { fmt } from '../money'
 
@@ -12,15 +17,20 @@ import { fmt } from '../money'
 // Everything on the dashboard is derived from the existing endpoints - no extra API needed.
 export default function Admin() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const isSuper = user.role === 'SUPER_ADMIN'
   const [camps, setCamps] = useState([])
   const [users, setUsers] = useState([])
   const [sales, setSales] = useState([])
   const [participants, setParticipants] = useState([])
+  const [products, setProducts] = useState([]) // only for the setup checklist
   const [error, setError] = useState(null)
   const [showCampForm, setShowCampForm] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
   const [campToClose, setCampToClose] = useState(null) // camp awaiting the close confirmation
+  const [detail, setDetail] = useState(null) // which stat tile is drilled into
+  const [member, setMember] = useState(null) // team member whose activity is open
+  const [invite, setInvite] = useState(null) // credentials sheet for a freshly created user
   // which camp the figures refer to. A camp admin only ever has their own; a super
   // admin has none of their own, so they pick one (defaults to the first active camp).
   const [statsCampId, setStatsCampId] = useState(user.campId ?? null)
@@ -50,6 +60,7 @@ export default function Admin() {
     const q = `?campId=${statsCampId}`
     api(`/api/sales${q}`).then(setSales).catch(() => setSales([]))
     api(`/api/participants${q}`).then(setParticipants).catch(() => setParticipants([]))
+    api(`/api/products${q}&activeOnly=false`).then(setProducts).catch(() => setProducts([]))
   }, [statsCampId])
 
   // ---- everything below is computed from the loaded lists -------------------
@@ -115,9 +126,114 @@ export default function Admin() {
 
   const statsCamp = camps.find((c) => c.id === statsCampId)
 
+  // Rows behind each tile, so any figure can be verified against its parts.
+  function detailContent() {
+    const saleRow = (s) => ({
+      key: s.id,
+      label: s.participantName ?? 'Barverkauf',
+      hint: `${s.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')} · ${new Date(s.createdAt).toLocaleString('de-AT')} · ${s.sellerName}`,
+      value: fmt(s.totalAmount),
+    })
+    const booked = sales.filter((s) => s.status === 'COMPLETED')
+    const today = new Date().toDateString()
+
+    switch (detail) {
+      case 'revenueToday': {
+        const rows = booked.filter((s) => new Date(s.createdAt).toDateString() === today)
+        return {
+          title: 'Umsatz heute', subtitle: 'Alle gebuchten Verkäufe von heute',
+          rows: rows.map(saleRow), total: { label: 'Summe', value: fmt(stats.revenueToday) },
+          emptyText: 'Heute noch nichts verkauft.',
+        }
+      }
+      case 'revenueTotal':
+        return {
+          title: 'Umsatz gesamt', subtitle: 'Alle gebuchten Verkäufe dieses Camps',
+          rows: booked.map(saleRow), total: { label: 'Summe', value: fmt(stats.revenueTotal) },
+        }
+      case 'participants':
+        return {
+          title: 'Teilnehmer', subtitle: `${participants.length} im Camp`,
+          rows: participants.map((p) => ({
+            key: p.id,
+            label: `${p.firstName} ${p.lastName}`,
+            hint: p.inDebt ? 'offene Schulden' : 'Guthaben',
+            value: fmt(Math.abs(Number(p.balance))),
+          })),
+        }
+      case 'debt': {
+        const debtors = participants.filter((p) => p.inDebt)
+        return {
+          title: 'Offene Schulden', subtitle: 'Wer noch zahlen muss',
+          rows: debtors.map((p) => ({
+            key: p.id, label: `${p.firstName} ${p.lastName}`, value: fmt(Math.abs(Number(p.balance))),
+          })),
+          total: { label: 'Gesamt offen', value: fmt(stats.openDebt) },
+          emptyText: 'Niemand ist im Minus.',
+        }
+      }
+      case 'team':
+        return {
+          title: 'Team', subtitle: `${stats.activeTeam} von ${users.length} aktiv`,
+          rows: users.map((u) => ({
+            key: u.id,
+            label: `${u.firstName} ${u.lastName}`,
+            hint: roleLabel(u.role),
+            value: u.active ? 'aktiv' : 'deaktiviert',
+          })),
+        }
+      case 'reversed': {
+        const rows = sales.filter((s) => s.status === 'REVERSED')
+        return {
+          title: 'Stornierte Verkäufe',
+          subtitle: stats.flagged ? `${stats.flagged} davon noch zu prüfen` : 'nichts offen zu prüfen',
+          rows: rows.map((s) => ({ ...saleRow(s), hint: `${saleRow(s).hint}${s.flaggedForReview ? ' · zu prüfen' : ''}` })),
+          emptyText: 'Nichts storniert.',
+        }
+      }
+      default:
+        return { title: '', rows: [] }
+    }
+  }
+
+  // The four things a camp needs before the stand can sell. Sellers/leads are the
+  // people who actually staff it, so an admin on their own doesn't count as "team".
+  const setupSteps = [
+    {
+      label: 'Camp anlegen',
+      hint: 'Name, Stadt und Zeitraum des Lagers',
+      cta: 'Camp anlegen',
+      done: camps.length > 0,
+      action: () => setShowCampForm(true),
+    },
+    {
+      label: 'Team einladen',
+      hint: 'Verkäufer:innen und Stand-Leitung anlegen',
+      cta: 'Benutzer anlegen',
+      done: users.some((u) => ['SELLER', 'SELLER_LEAD'].includes(u.role)),
+      action: () => setShowUserForm(true),
+    },
+    {
+      label: 'Produkte anlegen',
+      hint: 'Was verkauft wird, mit Preis und Kategorie',
+      cta: 'Zu den Produkten',
+      done: products.length > 0,
+      action: () => navigate('/products'),
+    },
+    {
+      label: 'Teilnehmer anlegen',
+      hint: 'Wer im Lager einkaufen kann',
+      cta: 'Zu den Teilnehmern',
+      done: participants.length > 0,
+      action: () => navigate('/participants'),
+    },
+  ]
+
   return (
     <div className="space-y-6">
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+
+      <SetupChecklist steps={setupSteps} />
 
       {/* ---------------------------------------------------------- overview */}
       <section>
@@ -137,25 +253,33 @@ export default function Admin() {
         </SectionHeader>
 
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          <StatCard label="Umsatz heute" value={fmt(stats.revenueToday)} hint={`${stats.salesToday} Verkäufe`} tone="primary" icon={Euro} />
-          <StatCard label="Umsatz gesamt" value={fmt(stats.revenueTotal)} hint={`${stats.salesTotal} Verkäufe`} tone="success" icon={Receipt} />
-          <StatCard label="Teilnehmer" value={stats.participants} tone="info" icon={Users} />
+          <StatCard label="Umsatz heute" value={fmt(stats.revenueToday)} hint={`${stats.salesToday} Verkäufe`}
+                    tone="primary" icon={Euro} onClick={() => setDetail('revenueToday')} />
+          <StatCard label="Umsatz gesamt" value={fmt(stats.revenueTotal)} hint={`${stats.salesTotal} Verkäufe`}
+                    tone="success" icon={Receipt} onClick={() => setDetail('revenueTotal')} />
+          <StatCard label="Teilnehmer" value={stats.participants}
+                    tone="info" icon={Users} onClick={() => setDetail('participants')} />
           <StatCard
             label="Offene Schulden"
             value={fmt(stats.openDebt)}
             hint={stats.debtors ? `${stats.debtors} Teilnehmer` : 'niemand im Minus'}
             tone={stats.debtors ? 'accent' : 'neutral'}
             icon={TrendingDown}
+            onClick={() => setDetail('debt')}
           />
-          <StatCard label="Team aktiv" value={stats.activeTeam} hint={`${users.length} gesamt`} tone="neutral" icon={UserRound} />
+          <StatCard label="Team aktiv" value={stats.activeTeam} hint={`${users.length} gesamt`}
+                    tone="neutral" icon={UserRound} onClick={() => setDetail('team')} />
           <StatCard
             label="Storniert"
             value={stats.reversed}
             hint={stats.flagged ? `${stats.flagged} zu prüfen` : 'nichts offen'}
             tone={stats.flagged ? 'warning' : 'neutral'}
             icon={Package}
+            onClick={() => setDetail('reversed')}
           />
         </div>
+
+        {detail && <StatDetailDialog {...detailContent()} onClose={() => setDetail(null)} />}
       </section>
 
       {/* -------------------------------------------- recent sales + rankings */}
@@ -165,9 +289,19 @@ export default function Admin() {
           <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
             {stats.recent.map((s) => (
               <div key={s.id} className="flex items-center gap-3 p-3">
-                <Avatar name={s.participantName || 'Barverkauf'} />
+                {/* an anonymous cash sale is NOT a person - a name avatar reading "B"
+                    made "Barverkauf" look like a participant called Barverkauf */}
+                {s.participantName ? (
+                  <Avatar name={s.participantName} />
+                ) : (
+                  <span className="w-10 h-10 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center shrink-0">
+                    <Banknote className="w-5 h-5" />
+                  </span>
+                )}
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{s.participantName || 'Barverkauf'}</div>
+                  <div className="font-medium truncate">
+                    {s.participantName ?? <span className="text-gray-500 italic font-normal">Barverkauf</span>}
+                  </div>
                   <div className="text-xs text-gray-500 truncate">
                     {s.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')}
                   </div>
@@ -272,18 +406,28 @@ export default function Admin() {
         <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
           {users.map((u) => (
             <div key={u.id} className={`p-3 flex items-center gap-3 hover:bg-gray-50 ${u.active ? '' : 'opacity-60'}`}>
-              <Avatar name={`${u.firstName} ${u.lastName}`} size="sm" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium flex items-center gap-2">
-                  <span className="truncate">{u.firstName} {u.lastName}</span>
-                  {u.id === user.id && <Badge tone="info">Du</Badge>}
-                  {!u.active && <Badge tone="accent">deaktiviert</Badge>}
+              {/* the row itself opens the person's activity */}
+              <button onClick={() => setMember(u)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                <Avatar name={`${u.firstName} ${u.lastName}`} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium flex items-center gap-2 flex-wrap">
+                    <span className="truncate">{u.firstName} {u.lastName}</span>
+                    {u.id === user.id && <Badge tone="info">Du</Badge>}
+                    {!u.active
+                      ? <Badge tone="accent">deaktiviert</Badge>
+                      : u.lastLoginAt
+                        ? <Badge tone="success">aktiv</Badge>
+                        : <Badge tone="warning">eingeladen</Badge>}
+                  </div>
+                  <div className="text-sm text-gray-500 truncate">
+                    {roleLabel(u.role)}
+                    {u.campName ? ` · ${u.campName}` : ''}
+                    {u.lastLoginAt
+                      ? ` · zuletzt ${new Date(u.lastLoginAt).toLocaleDateString('de-AT')}`
+                      : ' · noch nie angemeldet'}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500 truncate">
-                  {roleLabel(u.role)}
-                  {u.campName ? ` · ${u.campName}` : ''}
-                </div>
-              </div>
+              </button>
               {u.id !== user.id && (
                 <button onClick={() => toggleUser(u)} className="text-sm border rounded-lg px-3 py-2 hover:bg-gray-100 shrink-0">
                   {u.active ? 'Deaktivieren' : 'Aktivieren'}
@@ -307,8 +451,18 @@ export default function Admin() {
 
       {showCampForm && <CampForm onClose={() => setShowCampForm(false)} onSaved={reload} />}
       {showUserForm && (
-        <UserForm camps={camps} isSuper={isSuper} onClose={() => setShowUserForm(false)} onSaved={reload} />
+        <UserForm
+          camps={camps}
+          isSuper={isSuper}
+          onClose={() => setShowUserForm(false)}
+          onSaved={reload}
+          onCreated={setInvite} // hand over the credentials sheet to pass on
+        />
       )}
+
+      {invite && <InviteCard invite={invite} onClose={() => setInvite(null)} />}
+
+      {member && <TeamMemberDialog member={member} sales={sales} onClose={() => setMember(null)} />}
     </div>
   )
 }
@@ -355,7 +509,7 @@ function CampForm({ onClose, onSaved }) {
   )
 }
 
-function UserForm({ camps, isSuper, onClose, onSaved }) {
+function UserForm({ camps, isSuper, onClose, onSaved, onCreated }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -372,7 +526,7 @@ function UserForm({ camps, isSuper, onClose, onSaved }) {
   async function submit(event) {
     event.preventDefault()
     try {
-      await api('/api/users', {
+      const created = await api('/api/users', {
         method: 'POST',
         body: {
           firstName,
@@ -386,6 +540,9 @@ function UserForm({ camps, isSuper, onClose, onSaved }) {
       })
       onSaved()
       onClose()
+      // the plain password only exists here, in this form - the API never returns
+      // it again, so the invite sheet has to be built from what we just typed
+      onCreated({ ...created, password })
     } catch (e) {
       setError(e.message)
     }

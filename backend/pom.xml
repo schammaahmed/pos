@@ -47,6 +47,14 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!-- Apache POI reads the .xlsx files the camp leaders already keep their
+		     product and participant lists in. poi-ooxml pulls in poi itself. -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.4.1</version>
+		</dependency>
+
 		<!-- JJWT: library for creating and validating JSON Web Tokens (JWT).
 		     Split into 3 artifacts: api (what we code against), impl + jackson (runtime only) -->
 		<dependency>
