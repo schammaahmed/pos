@@ -37,7 +37,7 @@ public class ParticipantController {
     // Creating participants is admin/lead work (check-in desk), not something
     // every helping hand at the stand should be able to do.
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
     public ParticipantResponse create(@AuthenticationPrincipal User currentUser,
                                       @RequestParam(required = false) Long campId,
                                       @Valid @RequestBody CreateParticipantRequest request) {
@@ -54,7 +54,7 @@ public class ParticipantController {
 
     // Erasing debt is a trust operation - lead or admin only
     @PostMapping("/{id}/settle-debt")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
     public ParticipantResponse settleDebt(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
         return participantService.settleDebt(currentUser, id);
     }

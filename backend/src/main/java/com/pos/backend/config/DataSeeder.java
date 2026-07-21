@@ -6,12 +6,15 @@ import com.pos.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 // Runs once on every startup (CommandLineRunner). Solves the chicken-and-egg problem:
 // only admins can create users, but a fresh database has no admin to log in with.
+// @Order(2): runs after RoleMigration so we never seed against half-migrated data.
 @Component
+@Order(2)
 @RequiredArgsConstructor
 @Slf4j // Lombok: gives us a "log" field
 public class DataSeeder implements CommandLineRunner {
