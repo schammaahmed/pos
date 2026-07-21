@@ -8,8 +8,11 @@ export default defineConfig({
   server: {
     // "/api/..." requests from the React app are forwarded to Spring Boot.
     // The browser only ever talks to :5173 - no CORS drama during development.
+    //
+    // Override the target to run a sandbox UI against the sandbox backend:
+    //   VITE_API_TARGET=http://localhost:8081 npm run dev -- --port 5174
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': process.env.VITE_API_TARGET || 'http://localhost:8080',
     },
     // listen on the network too, so sellers' phones can open the dev app over Wi-Fi
     host: true,

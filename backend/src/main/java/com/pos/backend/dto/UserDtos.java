@@ -7,6 +7,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.time.LocalDateTime;
+
 public class UserDtos {
 
     public record CreateUserRequest(
@@ -27,13 +29,16 @@ public class UserDtos {
             String role,
             boolean active,
             Long campId,
-            String campName
+            String campName,
+            boolean mustChangePassword,   // still on the temporary password
+            LocalDateTime lastLoginAt     // null = invited, never signed in
     ) {
         public static UserResponse from(User user) {
             return new UserResponse(user.getId(), user.getFirstName(), user.getLastName(),
                     user.getEmail(), user.getRole().name(), user.isActive(),
                     user.getCamp() != null ? user.getCamp().getId() : null,
-                    user.getCamp() != null ? user.getCamp().getName() : null);
+                    user.getCamp() != null ? user.getCamp().getName() : null,
+                    user.isMustChangePassword(), user.getLastLoginAt());
         }
     }
 }

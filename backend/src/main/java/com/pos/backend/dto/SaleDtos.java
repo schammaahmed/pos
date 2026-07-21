@@ -14,6 +14,11 @@ import java.util.List;
 
 public class SaleDtos {
 
+    /** These relations are optional, so guard before touching them. */
+    private static String fullName(com.pos.backend.entity.User user) {
+        return user == null ? null : user.getFirstName() + " " + user.getLastName();
+    }
+
     public record CheckoutItem(
             @NotNull Long productId,
             @Min(1) int quantity
@@ -39,6 +44,7 @@ public class SaleDtos {
             Long id,
             Long participantId,
             String participantName,    // null for anonymous sales
+            Long sellerId,             // lets the UI show everything one team member did
             String sellerName,
             List<SaleItemResponse> items,
             BigDecimal totalAmount,
@@ -50,6 +56,10 @@ public class SaleDtos {
             BigDecimal newBalance,     // participant's balance after this sale (null for anonymous)
             String status,
             boolean flaggedForReview,
+            String flaggedByName,      // who raised the concern
+            LocalDateTime flaggedAt,
+            String reversedByName,     // who undid it
+            LocalDateTime reversedAt,
             LocalDateTime createdAt
     ) {
         public static SaleResponse from(Sale sale, BigDecimal changeToReturn) {
@@ -58,6 +68,7 @@ public class SaleDtos {
                     sale.getParticipant() != null ? sale.getParticipant().getId() : null,
                     sale.getParticipant() != null
                             ? sale.getParticipant().getFirstName() + " " + sale.getParticipant().getLastName() : null,
+                    sale.getSeller().getId(),
                     sale.getSeller().getFirstName() + " " + sale.getSeller().getLastName(),
                     sale.getItems().stream().map(SaleItemResponse::from).toList(),
                     sale.getTotalAmount(),
@@ -69,6 +80,10 @@ public class SaleDtos {
                     sale.getParticipant() != null ? sale.getParticipant().getBalance() : null,
                     sale.getStatus().name(),
                     sale.isFlaggedForReview(),
+                    fullName(sale.getFlaggedBy()),
+                    sale.getFlaggedAt(),
+                    fullName(sale.getReversedBy()),
+                    sale.getReversedAt(),
                     sale.getCreatedAt()
             );
         }

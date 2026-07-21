@@ -6,6 +6,7 @@ import com.pos.backend.entity.Camp;
 import com.pos.backend.entity.Role;
 import com.pos.backend.entity.User;
 import com.pos.backend.repository.CampRepository;
+import com.pos.backend.repository.SaleRepository;
 import com.pos.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,6 +22,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final CampRepository campRepository;
+    private final SaleRepository saleRepository;
     private final PasswordEncoder passwordEncoder;
 
     public List<UserResponse> list(User currentUser) {
@@ -91,6 +93,33 @@ public class UserService {
 
         user.setActive(active);
         return UserResponse.from(userRepository.save(user));
+    }
+
+    // Deleting a user who has booked sales would orphan the audit trail, so that is
+    // refused: those accounts get deactivated instead. Only someone who never sold
+    // anything (a wrong invite, a typo'd account) can actually be removed.
+    public void delete(User currentUser, Long userId) {
+        if (currentUser.getId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You cannot delete yourself");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (currentUser.getRole() == Role.CAMP_ADMIN) {
+            Long targetCampId = user.getCamp() != null ? user.getCamp().getId() : null;
+            if (!requireCampId(currentUser).equals(targetCampId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User belongs to another camp");
+            }
+            if (user.getRole() == Role.CAMP_ADMIN || user.getRole() == Role.SUPER_ADMIN) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Camp admins cannot delete admins");
+            }
+        }
+
+        if (saleRepository.existsBySellerId(userId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Diese Person hat bereits Verkäufe gebucht und kann nicht gelöscht werden – bitte deaktivieren.");
+        }
+        userRepository.delete(user);
     }
 
     private Long requireCampId(User user) {

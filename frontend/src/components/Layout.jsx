@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
-import { ClipboardCheck, LogOut, Menu, Package, Settings, ShoppingCart, Users } from 'lucide-react'
+import { ClipboardCheck, LogOut, Menu, Package, Receipt, ShieldUser, ShoppingCart, Users } from 'lucide-react'
 import { useAuth, isLead } from '../auth'
 import AccountMenu from './AccountMenu'
 import ChangePassword from './ChangePassword'
+import OnboardingTour, { hasSeenTour } from './OnboardingTour'
 
 const SIDEBAR_KEY = 'pos_sidebar_collapsed'
 
@@ -14,8 +15,15 @@ const SIDEBAR_KEY = 'pos_sidebar_collapsed'
 export default function Layout() {
   const { user, logout } = useAuth()
   const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [showTour, setShowTour] = useState(false)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1')
   const [now, setNow] = useState(() => new Date())
+
+  // First login: show the guide once the user is past the forced password change,
+  // so they aren't hit with two overlays at the same time.
+  useEffect(() => {
+    if (user && !user.mustChangePassword && !hasSeenTour(user)) setShowTour(true)
+  }, [user?.id, user?.mustChangePassword]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // keep the clock in the top bar roughly current without re-rendering constantly
   useEffect(() => {
@@ -40,7 +48,7 @@ export default function Layout() {
     return (
       <div className="min-h-screen bg-page">
         <header className="bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between">
-          <span className="font-bold">Camp Kiosk</span>
+          <span className="font-bold">Verkaufsstand</span>
           <button onClick={logout} className="text-sm text-gray-500 flex items-center gap-1">
             <LogOut className="w-4 h-4" /> Abmelden
           </button>
@@ -55,8 +63,12 @@ export default function Layout() {
     ...(user.role !== 'SUPER_ADMIN' ? [{ to: '/sell', label: 'Verkaufen', Icon: ShoppingCart }] : []),
     { to: '/participants', label: 'Teilnehmer', Icon: Users },
     { to: '/products', label: 'Produkte', Icon: Package },
+    // sellers see the log too: they may not undo anything, but they can flag a sale
+    // they are unsure about so the lead checks it
+    { to: '/sales', label: 'Verkäufe', Icon: Receipt },
     ...(isLead(user) && user.role !== 'SUPER_ADMIN' ? [{ to: '/review', label: 'Prüfen', Icon: ClipboardCheck }] : []),
-    ...(['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role) ? [{ to: '/admin', label: 'Admin', Icon: Settings }] : []),
+    // ShieldUser, not a gear: this is the admin area, not app settings
+    ...(['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role) ? [{ to: '/admin', label: 'Admin', Icon: ShieldUser }] : []),
   ]
 
   const dateLine =
@@ -77,7 +89,7 @@ export default function Layout() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="font-bold text-primary">Camp Kiosk</span>
+          <span className="font-bold text-primary">Verkaufsstand</span>
         </div>
 
         {/* centre: date and time, like v1 (hidden on phones - no room) */}
@@ -85,7 +97,10 @@ export default function Layout() {
 
         {/* right: one account menu holding greeting, password and sign out */}
         <div className="ml-auto md:ml-0 flex items-center shrink-0 md:w-56 md:justify-end">
-          <AccountMenu onChangePassword={() => setShowPasswordForm(true)} />
+          <AccountMenu
+            onChangePassword={() => setShowPasswordForm(true)}
+            onShowGuide={() => setShowTour(true)}
+          />
         </div>
       </header>
 
@@ -125,6 +140,7 @@ export default function Layout() {
       </main>
 
       {showPasswordForm && <ChangePassword onClose={() => setShowPasswordForm(false)} />}
+      {showTour && <OnboardingTour user={user} onClose={() => setShowTour(false)} />}
 
       {/* ---------------------------------------------------------------- bottom tabs (mobile) */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 flex z-30">

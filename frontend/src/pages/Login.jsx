@@ -29,7 +29,7 @@ export default function Login() {
     <div className="min-h-screen bg-page flex items-center justify-center p-4">
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-6 w-full max-w-sm space-y-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Camp Kiosk</h1>
+          <h1 className="text-2xl font-bold">Verkaufsstand</h1>
           <p className="text-sm text-gray-500">Verkaufsstand-Login</p>
         </div>
 

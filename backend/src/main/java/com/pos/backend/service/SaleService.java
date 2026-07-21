@@ -4,6 +4,8 @@ import com.pos.backend.dto.SaleDtos.CheckoutItem;
 import com.pos.backend.dto.SaleDtos.CheckoutRequest;
 import com.pos.backend.dto.SaleDtos.SaleResponse;
 import com.pos.backend.entity.*;
+import com.pos.backend.entity.AuditLog.Action;
+import com.pos.backend.entity.AuditLog.EntityType;
 import com.pos.backend.repository.ParticipantRepository;
 import com.pos.backend.repository.ProductRepository;
 import com.pos.backend.repository.SaleRepository;
@@ -27,6 +29,7 @@ public class SaleService {
     private final ParticipantRepository participantRepository;
     private final ProductRepository productRepository;
     private final CampAccess campAccess;
+    private final AuditService auditService;
     private final TransactionTemplate transactionTemplate;
 
     // Retry wrapper around the actual checkout. If two sellers charge the SAME participant at the
@@ -118,6 +121,16 @@ public class SaleService {
         }
 
         sale = saleRepository.save(sale); // cascade saves the items too
+
+        auditService.record(currentUser, camp, EntityType.SALE, sale.getId(),
+                participant != null
+                        ? participant.getFirstName() + " " + participant.getLastName()
+                        : "Barverkauf",
+                Action.SOLD,
+                sale.getItems().stream()
+                        .map(i -> i.getQuantity() + "x " + i.getProduct().getName())
+                        .reduce((a, b) -> a + ", " + b).orElse("") + " = " + total + " €");
+
         return SaleResponse.from(sale,
                 PaymentSplit.changeToReturn(total, request.cashGiven(), request.keepChangeAsCredit()));
     }
@@ -135,6 +148,17 @@ public class SaleService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This sale is already reversed");
         }
 
+        // A booking is never destroyed on a whim: it has to be raised for review first,
+        // and only the stand leadership may then undo it. Sellers flag, leads decide.
+        if (currentUser.getRole() == Role.SELLER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Nur die Stand-Leitung kann stornieren – bitte den Verkauf zur Prüfung markieren.");
+        }
+        if (!sale.isFlaggedForReview()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Dieser Verkauf muss zuerst zur Prüfung markiert werden, bevor er storniert werden kann.");
+        }
+
         // undo the balance effect: give back what was taken (balance + debt), take back what was gifted (credit)
         Participant participant = sale.getParticipant();
         if (participant != null) {
@@ -148,12 +172,39 @@ public class SaleService {
         sale.setStatus(Sale.Status.REVERSED);
         sale.setReversedBy(currentUser);
         sale.setReversedAt(LocalDateTime.now());
-        sale.setFlaggedForReview(currentUser.getRole() == Role.SELLER); // leads/admins reverse without flag
+        // the concern has been dealt with by the reversal itself, so it leaves the queue
+        sale.setFlaggedForReview(false);
+        sale.setReviewedBy(currentUser);
+        Sale saved = saleRepository.save(sale);
 
-        return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
+        auditService.record(currentUser, sale.getCamp(), EntityType.SALE, sale.getId(),
+                saleLabel(sale), Action.REVERSED, "Storniert über " + sale.getTotalAmount() + " €");
+        return SaleResponse.from(saved, BigDecimal.ZERO);
     }
 
-    // the lead ticks off a flagged reversal after checking it was legitimate
+    // Mark a sale for the lead to look at, WITHOUT undoing it. Until now the only way
+    // to raise a concern was to reverse the sale, which is destructive: a seller who
+    // was merely unsure had to undo a possibly-correct sale to get attention.
+    @Transactional
+    public SaleResponse flagForReview(User currentUser, Long saleId) {
+        Sale sale = saleRepository.findById(saleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found"));
+        campAccess.checkSameCamp(currentUser, sale.getCamp());
+
+        if (sale.isFlaggedForReview()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This sale is already flagged for review");
+        }
+        sale.setFlaggedForReview(true);
+        sale.setFlaggedBy(currentUser);   // so the lead can ask the right person about it
+        sale.setFlaggedAt(LocalDateTime.now());
+        Sale saved = saleRepository.save(sale);
+
+        auditService.record(currentUser, sale.getCamp(), EntityType.SALE, sale.getId(),
+                saleLabel(sale), Action.FLAGGED, "Zur Prüfung markiert");
+        return SaleResponse.from(saved, BigDecimal.ZERO);
+    }
+
+    // the lead ticks off a flagged sale after checking it was legitimate
     @Transactional
     public SaleResponse approveReversal(User currentUser, Long saleId) {
         Sale sale = saleRepository.findById(saleId)
@@ -165,7 +216,18 @@ public class SaleService {
         }
         sale.setFlaggedForReview(false);
         sale.setReviewedBy(currentUser);
-        return SaleResponse.from(saleRepository.save(sale), BigDecimal.ZERO);
+        Sale reviewed = saleRepository.save(sale);
+
+        auditService.record(currentUser, sale.getCamp(), EntityType.SALE, sale.getId(),
+                saleLabel(sale), Action.REVIEWED, "Geprüft und freigegeben");
+        return SaleResponse.from(reviewed, BigDecimal.ZERO);
+    }
+
+    /** What to call a sale in the log - the buyer, or the fact that it was a cash sale. */
+    private static String saleLabel(Sale sale) {
+        return sale.getParticipant() != null
+                ? sale.getParticipant().getFirstName() + " " + sale.getParticipant().getLastName()
+                : "Barverkauf";
     }
 
     public List<SaleResponse> list(User currentUser, Long campId, Long participantId) {
@@ -185,7 +247,7 @@ public class SaleService {
 
     public List<SaleResponse> flagged(User currentUser, Long campId) {
         Camp camp = campAccess.resolveCamp(currentUser, campId);
-        return saleRepository.findByCampIdAndFlaggedForReviewTrueOrderByReversedAtDesc(camp.getId())
+        return saleRepository.findByCampIdAndFlaggedForReviewTrueOrderByCreatedAtDesc(camp.getId())
                 .stream().map(s -> SaleResponse.from(s, BigDecimal.ZERO)).toList();
     }
 }

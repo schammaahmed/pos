@@ -6,6 +6,7 @@ import SellerPanel from './pages/SellerPanel'
 import Participants from './pages/Participants'
 import Products from './pages/Products'
 import Review from './pages/Review'
+import SalesLog from './pages/SalesLog'
 import Admin from './pages/Admin'
 
 // where "/" should take you, depending on who you are
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/participants" element={<Participants />} />
             <Route path="/products" element={<Products />} />
             <Route path="/review" element={<Review />} />
+            <Route path="/sales" element={<SalesLog />} />
             <Route path="/admin" element={<Admin />} />
           </Route>
           <Route path="/" element={<Home />} />

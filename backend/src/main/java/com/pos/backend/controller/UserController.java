@@ -38,6 +38,12 @@ public class UserController {
         return userService.setActive(currentUser, id, true);
     }
 
+    // only possible for accounts that never booked anything - see UserService.delete
+    @DeleteMapping("/{id}")
+    public void delete(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
+        userService.delete(currentUser, id);
+    }
+
     @PostMapping("/{id}/deactivate")
     public UserResponse deactivate(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
         return userService.setActive(currentUser, id, false);

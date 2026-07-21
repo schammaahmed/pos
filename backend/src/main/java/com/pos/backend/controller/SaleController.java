@@ -40,6 +40,12 @@ public class SaleController {
         return saleService.reverse(currentUser, id);
     }
 
+    // any seller may raise a concern about a sale without undoing it
+    @PostMapping("/{id}/flag")
+    public SaleResponse flag(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
+        return saleService.flagForReview(currentUser, id);
+    }
+
     @GetMapping("/flagged")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
     public List<SaleResponse> flagged(@AuthenticationPrincipal User currentUser,

@@ -4,6 +4,8 @@ import com.pos.backend.dto.ParticipantDtos.AdjustmentResponse;
 import com.pos.backend.dto.ParticipantDtos.CreateParticipantRequest;
 import com.pos.backend.dto.ParticipantDtos.DepositRequest;
 import com.pos.backend.dto.ParticipantDtos.ParticipantResponse;
+import com.pos.backend.entity.AuditLog.Action;
+import com.pos.backend.entity.AuditLog.EntityType;
 import com.pos.backend.entity.BalanceAdjustment;
 import com.pos.backend.entity.Camp;
 import com.pos.backend.entity.Participant;
@@ -26,6 +28,7 @@ public class ParticipantService {
     private final ParticipantRepository participantRepository;
     private final BalanceAdjustmentRepository adjustmentRepository;
     private final CampAccess campAccess;
+    private final AuditService auditService;
 
     public List<ParticipantResponse> list(User currentUser, Long campId, String search) {
         Camp camp = campAccess.resolveCamp(currentUser, campId);
@@ -50,6 +53,9 @@ public class ParticipantService {
         p.setGender(request.gender());
         p.setCamp(camp);
         p = participantRepository.save(p);
+
+        auditService.record(currentUser, camp, EntityType.PARTICIPANT, p.getId(),
+                p.getFirstName() + " " + p.getLastName(), Action.CREATED);
 
         // starting money is recorded as a DEPOSIT, not silently written into balance -
         // this way the audit trail is complete from minute one
@@ -88,7 +94,12 @@ public class ParticipantService {
         adjustmentRepository.save(adjustment);
 
         p.setBalance(BigDecimal.ZERO);
-        return ParticipantResponse.from(participantRepository.save(p));
+        Participant saved = participantRepository.save(p);
+
+        auditService.record(currentUser, p.getCamp(), EntityType.PARTICIPANT, p.getId(),
+                p.getFirstName() + " " + p.getLastName(), Action.DEBT_SETTLED,
+                "Schulden " + debt + " € beglichen; Saldo → 0,00 €");
+        return ParticipantResponse.from(saved);
     }
 
     public List<AdjustmentResponse> history(User currentUser, Long id) {
@@ -105,8 +116,13 @@ public class ParticipantService {
         adjustment.setCreatedBy(currentUser);
         adjustmentRepository.save(adjustment);
 
+        BigDecimal before = p.getBalance();
         p.setBalance(p.getBalance().add(amount));
         participantRepository.save(p);
+
+        auditService.record(currentUser, p.getCamp(), EntityType.PARTICIPANT, p.getId(),
+                p.getFirstName() + " " + p.getLastName(), Action.DEPOSIT,
+                "Einzahlung " + amount + " €; Saldo: " + before + " € → " + p.getBalance() + " €");
     }
 
     // every by-ID access funnels through this: load + camp isolation check
