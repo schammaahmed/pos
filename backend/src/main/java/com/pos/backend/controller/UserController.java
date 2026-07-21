@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 // Whole controller is admin-only; the fine-grained rules (which roles/camps a
-// CAMP_ADMIN may touch) live in UserService.
+// CAMP_LEAD may touch) live in UserService.
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN')")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
 public class UserController {
 
     private final UserService userService;

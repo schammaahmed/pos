@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/cash")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN')")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
 public class CashController {
 
     private final CashService cashService;

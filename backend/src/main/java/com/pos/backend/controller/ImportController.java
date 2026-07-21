@@ -17,7 +17,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/import")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
 public class ImportController {
 
     private final ImportService importService;

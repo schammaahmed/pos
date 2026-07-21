@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, ClipboardCheck, Package, Settings, ShoppingCart, Users, Wallet, X,
+  ArrowLeft, ArrowRight, ClipboardCheck, LayoutDashboard, Package, Settings,
+  ShoppingCart, Tent, Users, Wallet, X,
 } from 'lucide-react'
 import { isLead } from '../auth'
 
@@ -39,7 +40,8 @@ function stepsFor(user) {
     body: 'Ein Verkauf lässt sich stornieren. Storniert eine Verkäuferin, landet es unter „Prüfen" bei der Stand-Leitung – nichts verschwindet unbemerkt.',
   }
 
-  const admin = [
+  // The Stand-Leitung (CAMP_LEAD) runs one camp: the setup checklist walks them through it.
+  const lead = [
     {
       Icon: Settings,
       title: 'Camp einrichten',
@@ -48,7 +50,7 @@ function stepsFor(user) {
     {
       Icon: Users,
       title: 'Team anlegen',
-      body: 'Verkäufer:innen und Stand-Leitung bekommen ein temporäres Passwort, das sie beim ersten Login selbst ändern müssen. Gib es persönlich weiter.',
+      body: 'Verkäufer:innen und weitere Stand-Leitungen bekommen ein temporäres Passwort, das sie beim ersten Login selbst ändern müssen. Gib es persönlich weiter.',
     },
     {
       Icon: Package,
@@ -57,7 +59,37 @@ function stepsFor(user) {
     },
   ]
 
-  if (['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role)) return admin
+  // The super admin oversees EVERY camp - a guide, not a setup checklist.
+  const superAdmin = [
+    {
+      Icon: LayoutDashboard,
+      title: 'Du verwaltest alle Camps',
+      body: 'In der Übersicht siehst du jedes Camp mit Umsatz, Teilnehmern, offenen Schulden und Kassenstand – die ganze Aktion auf einen Blick.',
+    },
+    {
+      Icon: Tent,
+      title: 'Camp anlegen',
+      body: 'Lege im Admin-Bereich unter „Camps" ein neues Camp an – mit Name, Zeitraum und Startgeld für die Kasse.',
+    },
+    {
+      Icon: Users,
+      title: 'Stand-Leitung einladen',
+      body: 'Erstelle für jedes Camp eine Stand-Leitung. Sie bekommt eine Checkliste, um ihr Camp einzurichten – oder du übernimmst die Einrichtung selbst.',
+    },
+    {
+      Icon: ArrowRight,
+      title: 'In ein Camp wechseln',
+      body: 'Oben in der Leiste wählst du das aktive Camp. Teilnehmer, Produkte, Kasse und Verkäufe zeigen dann genau dieses Camp.',
+    },
+    {
+      Icon: LayoutDashboard,
+      title: 'Alles mitverfolgen',
+      body: 'Über „Übersicht" behältst du jederzeit alle Camps im Blick – Umsätze, Schulden und Kassenstände laufen dort zusammen.',
+    },
+  ]
+
+  if (user.role === 'SUPER_ADMIN') return superAdmin
+  if (user.role === 'CAMP_LEAD') return lead
   return isLead(user) ? [...selling, reviewing] : selling
 }
 

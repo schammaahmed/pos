@@ -39,15 +39,14 @@ export function useAuth() {
 
 // convenience: is this role allowed to manage things? (products, participants, reversal review)
 export function isLead(user) {
-  return ['SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD'].includes(user?.role)
+  return ['SUPER_ADMIN', 'CAMP_LEAD'].includes(user?.role)
 }
 
 // German label for a role - used by the account menu and the admin user list
 export function roleLabel(role) {
   return {
     SUPER_ADMIN: 'Super-Admin',
-    CAMP_ADMIN: 'Camp-Admin',
-    SELLER_LEAD: 'Stand-Leitung',
+    CAMP_LEAD: 'Stand-Leitung',
     SELLER: 'Verkäufer:in',
   }[role] ?? role
 }

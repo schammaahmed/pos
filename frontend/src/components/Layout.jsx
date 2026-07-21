@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
-import { ClipboardCheck, LogOut, Menu, Package, Receipt, ShieldUser, ShoppingCart, Users } from 'lucide-react'
+import { ClipboardCheck, LayoutDashboard, LogOut, Menu, Package, Receipt, ShieldUser, ShoppingCart, Users } from 'lucide-react'
 import { useAuth, isLead } from '../auth'
+import { useCamp } from '../campContext'
+import CampSwitcher from './CampSwitcher'
 import AccountMenu from './AccountMenu'
 import ChangePassword from './ChangePassword'
 import OnboardingTour, { hasSeenTour } from './OnboardingTour'
@@ -14,6 +16,7 @@ const SIDEBAR_KEY = 'pos_sidebar_collapsed'
 // sellers hold the device one-handed and thumbs reach the bottom.
 export default function Layout() {
   const { user, logout } = useAuth()
+  const { activeCampId } = useCamp()
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [showTour, setShowTour] = useState(false)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1')
@@ -58,17 +61,21 @@ export default function Layout() {
     )
   }
 
-  // one source of truth for both the desktop rail and the mobile tab bar
+  // one source of truth for both the desktop rail and the mobile tab bar. A super admin
+  // gets everything, scoped to the camp picked in the top-bar switcher: they oversee it
+  // all, so they can also step in and sell or review any camp.
   const navItems = [
-    ...(user.role !== 'SUPER_ADMIN' ? [{ to: '/sell', label: 'Verkaufen', Icon: ShoppingCart }] : []),
+    // a super admin oversees every camp, so their home is the cross-camp overview
+    ...(user.role === 'SUPER_ADMIN' ? [{ to: '/overview', label: 'Übersicht', Icon: LayoutDashboard }] : []),
+    { to: '/sell', label: 'Verkaufen', Icon: ShoppingCart },
     { to: '/participants', label: 'Teilnehmer', Icon: Users },
     { to: '/products', label: 'Produkte', Icon: Package },
     // sellers see the log too: they may not undo anything, but they can flag a sale
     // they are unsure about so the lead checks it
     { to: '/sales', label: 'Verkäufe', Icon: Receipt },
-    ...(isLead(user) && user.role !== 'SUPER_ADMIN' ? [{ to: '/review', label: 'Prüfen', Icon: ClipboardCheck }] : []),
+    ...(isLead(user) ? [{ to: '/review', label: 'Prüfen', Icon: ClipboardCheck }] : []),
     // ShieldUser, not a gear: this is the admin area, not app settings
-    ...(['SUPER_ADMIN', 'CAMP_ADMIN'].includes(user.role) ? [{ to: '/admin', label: 'Admin', Icon: ShieldUser }] : []),
+    ...(['SUPER_ADMIN', 'CAMP_LEAD'].includes(user.role) ? [{ to: '/admin', label: 'Admin', Icon: ShieldUser }] : []),
   ]
 
   const dateLine =
@@ -92,8 +99,14 @@ export default function Layout() {
           <span className="font-bold text-primary">Verkaufsstand</span>
         </div>
 
-        {/* centre: date and time, like v1 (hidden on phones - no room) */}
-        <div className="hidden md:block flex-1 text-center text-sm text-gray-500">{dateLine}</div>
+        {/* centre: for a super admin, the active-camp switcher (which camp everything is
+            scoped to - visible on phones too, since "welche Kassa?" matters most there);
+            otherwise the date and time, like v1 */}
+        <div className="flex-1 flex justify-center min-w-0 px-2">
+          {user.role === 'SUPER_ADMIN'
+            ? <CampSwitcher />
+            : <span className="hidden md:block text-sm text-gray-500 truncate">{dateLine}</span>}
+        </div>
 
         {/* right: one account menu holding greeting, password and sign out */}
         <div className="ml-auto md:ml-0 flex items-center shrink-0 md:w-56 md:justify-end">
@@ -134,7 +147,9 @@ export default function Layout() {
 
       {/* ---------------------------------------------------------------- content */}
       <main className={`pt-14 pb-24 md:pb-8 ${collapsed ? 'md:pl-16' : 'md:pl-56'}`}>
-        <div className="max-w-6xl mx-auto p-4">
+        {/* keyed on the active camp: switching camps in the top bar remounts the page so
+            every camp-scoped list refetches for the newly chosen camp, no per-page wiring */}
+        <div key={activeCampId} className="max-w-6xl mx-auto p-4">
           <Outlet /> {/* the current page renders here */}
         </div>
       </main>

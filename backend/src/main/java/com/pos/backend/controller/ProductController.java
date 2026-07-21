@@ -30,7 +30,7 @@ public class ProductController {
     // changing the product range is lead/admin work - a helping hand at the stand
     // should not be able to change prices (user requirement #4)
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
     public ProductResponse create(@AuthenticationPrincipal User currentUser,
                                   @RequestParam(required = false) Long campId,
                                   @Valid @RequestBody ProductRequest request) {
@@ -38,7 +38,7 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
     public ProductResponse update(@AuthenticationPrincipal User currentUser,
                                   @PathVariable Long id,
                                   @Valid @RequestBody ProductRequest request) {
@@ -46,13 +46,13 @@ public class ProductController {
     }
 
     @PostMapping("/{id}/activate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
     public ProductResponse activate(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
         return productService.setActive(currentUser, id, true);
     }
 
     @PostMapping("/{id}/deactivate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_ADMIN', 'SELLER_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'CAMP_LEAD')")
     public ProductResponse deactivate(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
         return productService.setActive(currentUser, id, false);
     }

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Banknote, Crown, Euro, Lightbulb, Package, Receipt, TrendingDown, Trophy, UserRound, Users,
+  Banknote, Coins, Crown, Euro, LayoutDashboard, Lightbulb, Package, Receipt,
+  Tent, TrendingDown, Trophy, UserRound, Users,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth, roleLabel } from '../auth'
+import { useCamp } from '../campContext'
 import { ConfirmDialog } from '../components/Dialog'
 import SetupChecklist from '../components/SetupChecklist'
 import CashBox from '../components/CashBox'
@@ -14,40 +16,33 @@ import TeamMemberDialog from '../components/TeamMemberDialog'
 import { Avatar, Badge, EmptyState, SectionHeader, StatCard } from '../components/ui'
 import { fmt } from '../money'
 
-// Admin area. CAMP_ADMIN: manage their camp's team. SUPER_ADMIN: additionally manage camps.
-// Everything on the dashboard is derived from the existing endpoints - no extra API needed.
+// Admin area for ONE camp. CAMP_LEAD manages their own; a SUPER_ADMIN works on whichever
+// camp is active in the top-bar switcher and can additionally create/close camps. The page
+// is split into tabs so it stays scannable instead of one long scroll. Everything on the
+// dashboard is derived from the existing endpoints - no extra API needed.
 export default function Admin() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const isSuper = user.role === 'SUPER_ADMIN'
-  const [camps, setCamps] = useState([])
+  // the active camp comes from the shared context (top-bar switcher for super admins,
+  // own camp for a lead), so every page - not just this one - stays on the same camp
+  const { camps, activeCampId, activeCamp, refreshCamps } = useCamp()
   const [users, setUsers] = useState([])
   const [sales, setSales] = useState([])
   const [participants, setParticipants] = useState([])
   const [products, setProducts] = useState([]) // only for the setup checklist
   const [error, setError] = useState(null)
+  const [tab, setTab] = useState('overview')
   const [showCampForm, setShowCampForm] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
   const [campToClose, setCampToClose] = useState(null) // camp awaiting the close confirmation
   const [detail, setDetail] = useState(null) // which stat tile is drilled into
   const [member, setMember] = useState(null) // team member whose activity is open
   const [invite, setInvite] = useState(null) // credentials sheet for a freshly created user
-  // Which camp the figures (and the cash box) refer to. A camp admin only ever has
-  // their own; a super admin has none, so they pick one. The choice is remembered
-  // per device, otherwise it snaps back to the default on every remount.
-  const [statsCampId, setStatsCampId] = useState(() => {
-    const saved = Number(localStorage.getItem('pos_admin_camp'))
-    return user.campId ?? (saved || null)
-  })
-
-  function chooseCamp(id) {
-    setStatsCampId(id)
-    localStorage.setItem('pos_admin_camp', String(id))
-  }
 
   async function reload() {
     try {
-      setCamps(await api('/api/camps'))
+      await refreshCamps()
       setUsers(await api('/api/users'))
     } catch (e) {
       setError(e.message)
@@ -58,22 +53,13 @@ export default function Admin() {
     reload()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // super admin: once camps are loaded, default to an active camp - but only if the
-  // remembered one no longer exists, so a valid saved choice is never overridden
+  // load the figures for the active camp (api() adds campId for super admins automatically)
   useEffect(() => {
-    if (camps.length === 0) return
-    if (statsCampId && camps.some((c) => c.id === statsCampId)) return
-    chooseCamp((camps.find((c) => c.status === 'ACTIVE') ?? camps[0]).id)
-  }, [camps, statsCampId])
-
-  // load the figures for the selected camp
-  useEffect(() => {
-    if (!statsCampId) return
-    const q = `?campId=${statsCampId}`
-    api(`/api/sales${q}`).then(setSales).catch(() => setSales([]))
-    api(`/api/participants${q}`).then(setParticipants).catch(() => setParticipants([]))
-    api(`/api/products${q}&activeOnly=false`).then(setProducts).catch(() => setProducts([]))
-  }, [statsCampId])
+    if (!activeCampId) return
+    api('/api/sales').then(setSales).catch(() => setSales([]))
+    api('/api/participants').then(setParticipants).catch(() => setParticipants([]))
+    api('/api/products?activeOnly=false').then(setProducts).catch(() => setProducts([]))
+  }, [activeCampId])
 
   // ---- everything below is computed from the loaded lists -------------------
   const stats = useMemo(() => {
@@ -136,7 +122,7 @@ export default function Admin() {
     }
   }
 
-  const statsCamp = camps.find((c) => c.id === statsCampId)
+  const statsCamp = activeCamp
 
   // Rows behind each tile, so any figure can be verified against its parts.
   function detailContent() {
@@ -222,7 +208,7 @@ export default function Admin() {
       label: 'Team einladen',
       hint: 'Verkäufer:innen und Stand-Leitung anlegen',
       cta: 'Benutzer anlegen',
-      done: users.some((u) => ['SELLER', 'SELLER_LEAD'].includes(u.role)),
+      done: users.some((u) => ['SELLER', 'CAMP_LEAD'].includes(u.role)),
       action: () => setShowUserForm(true),
     },
     {
@@ -241,28 +227,47 @@ export default function Admin() {
     },
   ]
 
+  const tabs = [
+    { id: 'overview', label: 'Überblick', Icon: LayoutDashboard },
+    { id: 'team', label: 'Team', Icon: Users },
+    { id: 'cash', label: 'Kasse', Icon: Coins },
+    ...(isSuper ? [{ id: 'camps', label: 'Camps', Icon: Package }] : []),
+  ]
+
   return (
     <div className="space-y-6">
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
+      {/* a super admin works on ONE camp at a time - say which, so nothing is ambiguous */}
+      {isSuper && statsCamp && (
+        <div className="flex items-center gap-2 text-sm bg-primary-soft text-primary-dark rounded-lg px-3 py-2">
+          <Tent className="w-4 h-4 shrink-0" />
+          <span>Du bearbeitest <strong>{statsCamp.name}</strong>. Oben in der Leiste wechselst du das Camp.</span>
+        </div>
+      )}
+
       <SetupChecklist steps={setupSteps} />
 
+      {/* tabs keep the admin area scannable instead of one endless scroll */}
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+        {tabs.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
+              tab === id ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+      </div>
+
       {/* ---------------------------------------------------------- overview */}
+      {tab === 'overview' && (
+      <div className="space-y-6">
       <section>
-        <SectionHeader title="Überblick" hint={statsCamp ? statsCamp.name : 'Kein Camp ausgewählt'}>
-          {/* a super admin belongs to no camp, so they choose which one the figures show */}
-          {isSuper && camps.length > 0 && (
-            <select
-              value={statsCampId ?? ''}
-              onChange={(e) => chooseCamp(Number(e.target.value))}
-              className="border rounded-lg px-3 py-2 text-sm bg-white"
-            >
-              {camps.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          )}
-        </SectionHeader>
+        <SectionHeader title="Überblick" hint={statsCamp ? statsCamp.name : 'Kein Camp ausgewählt'} />
 
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <StatCard label="Umsatz heute" value={fmt(stats.revenueToday)} hint={`${stats.salesToday} Verkäufe`}
@@ -370,11 +375,14 @@ export default function Admin() {
           </div>
         </section>
       </div>
+      </div>
+      )}
 
-      {/* the physical cash box for the selected camp */}
-      {statsCampId && <CashBox campId={statsCampId} />}
+      {/* ---------------------------------------------------------------- cash */}
+      {tab === 'cash' && activeCampId && <CashBox campId={activeCampId} />}
 
-      {/* camps - super admin manages, camp admin just sees their own */}
+      {/* camps - super admin manages, and creates/closes them here */}
+      {tab === 'camps' && (
       <section className="space-y-2">
         <div className="flex justify-between items-center">
           <h2 className="font-bold text-lg">Camps</h2>
@@ -409,8 +417,10 @@ export default function Admin() {
           {camps.length === 0 && <EmptyState icon={Package}>Noch keine Camps.</EmptyState>}
         </div>
       </section>
+      )}
 
-      {/* team */}
+      {/* ---------------------------------------------------------------- team */}
+      {tab === 'team' && (
       <section className="space-y-2">
         <div className="flex justify-between items-center">
           <h2 className="font-bold text-lg">Team</h2>
@@ -452,6 +462,7 @@ export default function Admin() {
           ))}
         </div>
       </section>
+      )}
 
       {campToClose && (
         <ConfirmDialog
@@ -545,10 +556,10 @@ function UserForm({ camps, isSuper, onClose, onSaved, onCreated }) {
   const [campId, setCampId] = useState('')
   const [error, setError] = useState(null)
 
-  // camp admins may only create sellers/leads - the backend enforces this too
+  // a camp lead may only create sellers and fellow leads - the backend enforces this too
   const roles = isSuper
-    ? ['SELLER', 'SELLER_LEAD', 'CAMP_ADMIN', 'SUPER_ADMIN']
-    : ['SELLER', 'SELLER_LEAD']
+    ? ['SELLER', 'CAMP_LEAD', 'SUPER_ADMIN']
+    : ['SELLER', 'CAMP_LEAD']
 
   async function submit(event) {
     event.preventDefault()
