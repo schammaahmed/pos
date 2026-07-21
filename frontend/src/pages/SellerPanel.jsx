@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, CheckCircle2, Minimize2, Minus, Package, Plus, Search, ShoppingCart, Trash2, UserRound, X } from 'lucide-react'
 import { api } from '../api'
+import { useCamp } from '../campContext'
 import { fmt, fromCents, toCents } from '../money'
 import ParticipantPickerSheet, { rememberRecentParticipant } from '../components/ParticipantPickerSheet'
 
@@ -340,6 +341,9 @@ function ProductGrid({ products, cart, onAdd, onChangeQty }) {
 // Docked rather than full-screen so the product grid stays visible and reachable:
 // a right-hand panel on a laptop, a bottom sheet on a phone.
 function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPickParticipant, onClose, onSold, isDesktop, size, onResize, onResetSize }) {
+  // checkout resolves the camp from the request body, so a super admin (who has no camp
+  // of their own) must name the active one; a camp user's own camp is used regardless
+  const { activeCampId } = useCamp()
   const [cashInput, setCashInput] = useState('') // what the buyer hands over, as typed
   // The seller must ACTIVELY choose one method - no default. Each method is a single, clear
   // intent, so cash and balance can never silently fight each other (the old bug).
@@ -408,6 +412,7 @@ function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPick
       const sale = await api('/api/sales', {
         method: 'POST',
         body: {
+          campId: activeCampId,
           participantId: participant?.id ?? null,
           items: cartEntries.map((e) => ({ productId: e.product.id, quantity: e.qty })),
           cashGiven: fromCents(cashCents),
