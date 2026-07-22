@@ -1,7 +1,6 @@
 # Camp POS — a point-of-sale system for youth camps
 
-A full-stack point-of-sale application for the *Verkaufsstand* (kiosk) at Austrian summer and
-winter camps. Kids pay with a prepaid balance, cash, or "on the tab"; camp leads run the stand
+A full-stack point-of-sale application for a kiosk youth camp. People pay with a prepaid balance, cash, or "on the tab"; camp leads run the stand
 and its cash box; a super-admin oversees every camp from one place.
 
 Built as a learning project to go deep on **Spring Boot**, **React**, and the design decisions
