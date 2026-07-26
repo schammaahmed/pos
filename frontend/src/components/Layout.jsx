@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
-import { ClipboardCheck, LayoutDashboard, LogOut, Menu, Package, Receipt, ShieldUser, ShoppingCart, Users } from 'lucide-react'
+import { ClipboardCheck, LayoutDashboard, LogOut, Menu, Package, PackageOpen, Receipt, ShieldUser, ShoppingCart, Users } from 'lucide-react'
 import { useAuth, isLead } from '../auth'
 import { useCamp } from '../campContext'
 import CampSwitcher from './CampSwitcher'
@@ -70,6 +70,8 @@ export default function Layout() {
     { to: '/sell', label: 'Verkaufen', Icon: ShoppingCart },
     { to: '/participants', label: 'Teilnehmer', Icon: Users },
     { to: '/products', label: 'Produkte', Icon: Package },
+    // Aktionen (Vorbestellungen + Ausgabe). At the till just like Verkaufen, so any staff can use it.
+    { to: '/aktionen', label: 'Aktionen', Icon: PackageOpen },
     // sellers see the log too: they may not undo anything, but they can flag a sale
     // they are unsure about so the lead checks it
     { to: '/sales', label: 'Verkäufe', Icon: Receipt },

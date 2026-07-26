@@ -63,6 +63,10 @@ export default function CashBox({ campId }) {
         <div className="space-y-1.5 text-sm">
           <Line icon={Wallet} label="Startgeld" value={book.startingCash} />
           <Line icon={Banknote} label="Barverkäufe" value={book.cashSales} />
+          {/* only show the Aktionen line when relevant, so casual cash books stay uncluttered */}
+          {Number(book.specialsCash) > 0 && (
+            <Line icon={Banknote} label="Aktionen (bar)" value={book.specialsCash} />
+          )}
           <Line icon={ArrowDownToLine} label="Nachlagen" value={book.deposits} />
           <Line icon={ArrowUpFromLine} label="Entnahmen" value={book.withdrawals} negative />
           <div className="flex justify-between items-center border-t border-gray-100 pt-2 mt-1 font-bold">
