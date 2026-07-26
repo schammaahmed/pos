@@ -6,6 +6,7 @@ import com.pos.backend.entity.AuditLog.Action;
 import com.pos.backend.entity.AuditLog.EntityType;
 import com.pos.backend.repository.CashMovementRepository;
 import com.pos.backend.repository.SaleRepository;
+import com.pos.backend.repository.SpecialOrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ public class CashService {
 
     private final CashMovementRepository cashMovementRepository;
     private final SaleRepository saleRepository;
+    private final SpecialOrderRepository specialOrderRepository;
     private final CampAccess campAccess;
     private final AuditService auditService;
 
@@ -35,11 +37,14 @@ public class CashService {
         // only the cash actually taken over the counter counts - not balance/debt sales,
         // and reversed sales are excluded via the repository query
         BigDecimal cashSales = orZero(saleRepository.sumPaidCashByCamp(camp.getId()));
+        // Specials go through their own row (not Sale), so their cash lives in the SpecialOrder
+        // table and must be summed in separately, otherwise the reconciliation is short
+        BigDecimal specialsCash = orZero(specialOrderRepository.sumCollectedCashByCamp(camp.getId()));
 
         BigDecimal start = orZero(camp.getStartingCash());
-        BigDecimal expected = start.add(cashSales).add(deposits).subtract(withdrawals);
+        BigDecimal expected = start.add(cashSales).add(specialsCash).add(deposits).subtract(withdrawals);
 
-        return new CashBook(start, cashSales, deposits, withdrawals, expected,
+        return new CashBook(start, cashSales, specialsCash, deposits, withdrawals, expected,
                 movements.stream().map(CashMovementResponse::from).toList());
     }
 

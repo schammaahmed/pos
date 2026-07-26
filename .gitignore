@@ -33,3 +33,8 @@ application-test.properties
 
 # macOS folder metadata - never belongs in a repo
 .DS_Store
+
+# IDE / editor settings - per-developer, never belongs in a shared repo
+.idea/
+*.iml
+.vscode/

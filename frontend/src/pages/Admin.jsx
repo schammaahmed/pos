@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Banknote, Coins, Crown, Euro, LayoutDashboard, Lightbulb, Package, Receipt,
+  Banknote, Coins, Crown, Euro, LayoutDashboard, Lightbulb, Package, PackageOpen, Receipt,
   Tent, TrendingDown, Trophy, UserRound, Users,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -231,6 +231,7 @@ export default function Admin() {
     { id: 'overview', label: 'Überblick', Icon: LayoutDashboard },
     { id: 'team', label: 'Team', Icon: Users },
     { id: 'cash', label: 'Kasse', Icon: Coins },
+    { id: 'specials', label: 'Aktionen', Icon: PackageOpen },
     ...(isSuper ? [{ id: 'camps', label: 'Camps', Icon: Package }] : []),
   ]
 
@@ -380,6 +381,8 @@ export default function Admin() {
 
       {/* ---------------------------------------------------------------- cash */}
       {tab === 'cash' && activeCampId && <CashBox campId={activeCampId} />}
+
+      {tab === 'specials' && activeCampId && <SpecialsAdmin />}
 
       {/* camps - super admin manages, and creates/closes them here */}
       {tab === 'camps' && (
@@ -616,6 +619,150 @@ function UserForm({ camps, isSuper, onClose, onSaved, onCreated }) {
             ))}
           </select>
         )}
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
+          <button type="submit" className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">Anlegen</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// -------- Aktionen (Specials) admin: create/list/close ---------------------
+// The seller side (reserve + Ausgabe) lives on /aktionen; here the lead defines
+// what the stand is going to offer.
+function SpecialsAdmin() {
+  const [specials, setSpecials] = useState([])
+  const [showForm, setShowForm] = useState(false)
+  const [closing, setClosing] = useState(null)
+  const [error, setError] = useState(null)
+
+  async function reload() {
+    try { setSpecials(await api('/api/specials')) } catch (e) { setError(e.message) }
+  }
+  useEffect(() => { reload() }, [])
+
+  async function doClose(id) {
+    try { await api(`/api/specials/${id}/close`, { method: 'POST' }); setClosing(null); reload() }
+    catch (e) { setError(e.message) }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="font-bold text-lg">Aktionen</h2>
+          <p className="text-xs text-gray-500">
+            Vorbestell-Angebote wie „Waffeln am Samstag". Bestellungen laufen im Panel „Aktionen" auf.
+          </p>
+        </div>
+        <button onClick={() => setShowForm(true)}
+                className="bg-primary text-white rounded-lg px-4 py-2 text-sm font-semibold">
+          + Aktion
+        </button>
+      </div>
+
+      {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+        {specials.map((s) => (
+          <div key={s.id} className="p-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium flex items-center gap-2 flex-wrap">
+                <span className="truncate">{s.name}</span>
+                <Badge tone={s.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                  {s.status === 'ACTIVE' ? 'aktiv' : 'geschlossen'}
+                </Badge>
+              </div>
+              <div className="text-xs text-gray-500 truncate">
+                {fmt(s.price)} · Ausgabe {new Date(s.collectionDate).toLocaleDateString('de-AT')}
+                {s.orderableUntil && ' · bis ' + new Date(s.orderableUntil).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                {s.capacity != null && ` · ${s.taken}/${s.capacity} bestellt`}
+                {s.capacity == null && s.taken > 0 && ` · ${s.taken} bestellt`}
+              </div>
+            </div>
+            {s.status === 'ACTIVE' && (
+              <button onClick={() => setClosing(s)}
+                      className="text-sm border rounded-lg px-3 py-2 text-accent hover:bg-accent-soft shrink-0">
+                Schließen
+              </button>
+            )}
+          </div>
+        ))}
+        {specials.length === 0 && <EmptyState icon={PackageOpen}>Noch keine Aktionen.</EmptyState>}
+      </div>
+
+      {showForm && <SpecialForm onClose={() => setShowForm(false)} onSaved={reload} />}
+      {closing && (
+        <ConfirmDialog
+          title="Aktion schließen"
+          message={`„${closing.name}" schließen? Neue Vorbestellungen werden dann abgelehnt; bestehende bleiben.`}
+          confirmLabel="Schließen"
+          tone="danger"
+          onConfirm={() => doClose(closing.id)}
+          onClose={() => setClosing(null)}
+        />
+      )}
+    </section>
+  )
+}
+
+function SpecialForm({ onClose, onSaved }) {
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [price, setPrice] = useState('')
+  const [collectionDate, setCollectionDate] = useState('')
+  const [orderableUntil, setOrderableUntil] = useState('')
+  const [capacity, setCapacity] = useState('')
+  const [error, setError] = useState(null)
+
+  async function submit(event) {
+    event.preventDefault()
+    try {
+      await api('/api/specials', {
+        method: 'POST',
+        body: {
+          name, description: description || null,
+          price: Number(String(price).replace(',', '.')),
+          collectionDate,
+          orderableUntil: orderableUntil || null,
+          capacity: capacity ? Number(capacity) : null,
+        },
+      })
+      onSaved(); onClose()
+    } catch (e) { setError(e.message) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-30 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="bg-white rounded-t-2xl sm:rounded-2xl p-4 w-full max-w-md space-y-3">
+        <h2 className="font-bold text-lg">Aktion anlegen</h2>
+        {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-2">{error}</div>}
+        <input required placeholder="Name (z.B. Waffeln am Samstag)" value={name}
+               onChange={(e) => setName(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
+        <textarea placeholder="Kurzbeschreibung (optional)" value={description}
+                  onChange={(e) => setDescription(e.target.value)} rows={2}
+                  className="w-full border rounded-lg px-3 py-3" />
+        <input required inputMode="decimal" placeholder="Preis pro Stück (z.B. 3,00)" value={price}
+               onChange={(e) => setPrice(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
+        <label className="block text-sm text-gray-600">
+          Ausgabetag
+          <input required type="date" value={collectionDate}
+                 onChange={(e) => setCollectionDate(e.target.value)}
+                 className="w-full border rounded-lg px-3 py-3 mt-1" />
+        </label>
+        <label className="block text-sm text-gray-600">
+          Bestellschluss (optional)
+          <input type="datetime-local" value={orderableUntil}
+                 onChange={(e) => setOrderableUntil(e.target.value)}
+                 className="w-full border rounded-lg px-3 py-3 mt-1" />
+        </label>
+        <label className="block text-sm text-gray-600">
+          Max. Menge (optional; wird als Warnung angezeigt, nicht als harte Sperre)
+          <input type="number" min={1} placeholder="z.B. 20" value={capacity}
+                 onChange={(e) => setCapacity(e.target.value)}
+                 className="w-full border rounded-lg px-3 py-3 mt-1" />
+        </label>
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
           <button type="submit" className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">Anlegen</button>
