@@ -21,13 +21,24 @@ public class RoleMigration implements CommandLineRunner {
 
     private final JdbcTemplate jdbc;
 
+    // Every check constraint Hibernate creates for an @Enumerated column becomes stale
+    // as soon as we add a new value, because ddl-auto=update doesn't revise them. Drop
+    // the known-stale ones on startup - Hibernate re-adds an up-to-date one on the next
+    // boot, and an absent constraint is simply permissive. All idempotent (IF EXISTS).
+    // {table, constraint} pairs: derivation from the constraint name isn't safe because
+    // column names can themselves contain underscores (e.g. audit_logs.entity_type).
+    private static final String[][] STALE_ENUM_CHECKS = {
+            {"users",      "users_role_check"},            // Role: CAMP_ADMIN/SELLER_LEAD → CAMP_LEAD
+            {"pre_orders", "pre_orders_status_check"},     // PreOrder.Status: + IN_PROGRESS, READY
+            {"audit_logs", "audit_logs_action_check"},     // AuditLog.Action: many new values across chunks
+            {"audit_logs", "audit_logs_entity_type_check"},// AuditLog.EntityType: + SPECIAL, SPECIAL_ORDER, PRE_ORDER
+    };
+
     @Override
     public void run(String... args) {
-        // Hibernate (ddl-auto=update) generated a CHECK constraint pinning role to the OLD
-        // enum values and never revises it, so we drop it first - otherwise writing the new
-        // CAMP_LEAD value is rejected. Hibernate re-adds an up-to-date one on the next boot;
-        // if it doesn't, an absent constraint is simply permissive. Idempotent (IF EXISTS).
-        jdbc.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check");
+        for (String[] pair : STALE_ENUM_CHECKS) {
+            jdbc.execute("ALTER TABLE " + pair[0] + " DROP CONSTRAINT IF EXISTS " + pair[1]);
+        }
 
         int moved = jdbc.update(
                 "UPDATE users SET role = 'CAMP_LEAD' WHERE role IN ('CAMP_ADMIN', 'SELLER_LEAD')");

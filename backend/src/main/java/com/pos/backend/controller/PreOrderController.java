@@ -27,6 +27,18 @@ public class PreOrderController {
         return preOrderService.staffQueue(currentUser, campId);
     }
 
+    // Kitchen transitions. Both are no-body POSTs so they read like the actions they are
+    // (see docs at /api/preorders): start = "in Vorbereitung", ready = "abholbereit".
+    @PostMapping("/{id}/start")
+    public PreOrderResponse start(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
+        return preOrderService.start(currentUser, id);
+    }
+
+    @PostMapping("/{id}/ready")
+    public PreOrderResponse markReady(@AuthenticationPrincipal User currentUser, @PathVariable Long id) {
+        return preOrderService.markReady(currentUser, id);
+    }
+
     @PostMapping("/{id}/pickup")
     public PreOrderResponse pickup(@AuthenticationPrincipal User currentUser,
                                    @PathVariable Long id,

@@ -1,68 +1,136 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Clock, PackageOpen, X } from 'lucide-react'
+import {
+  CheckCircle2, ChevronRight, Clock, Flame, PackageOpen, PlayCircle, X,
+} from 'lucide-react'
 import { api } from '../api'
 import { fmt } from '../money'
 import { EmptyState, SectionHeader } from '../components/ui'
 import { ConfirmDialog } from '../components/Dialog'
 
-// Staff-facing view of self-serve pre-orders coming in from the QR flow. One row per
-// order; sellers pick them up (with a payment sheet like the till) or cancel them.
+// Kitchen board for incoming self-serve pre-orders. Grouped by status so the flow
+// through the station is obvious at a glance:
+//   Neu           — participant just placed it
+//   In Küche      — someone is preparing it
+//   Fertig        — ready to hand out
+//   Verlauf       — the day's done + cancelled work (collapsed by default)
+//
+// Not every order needs the middle stops: a Snickers goes NEW → PICKED_UP directly
+// (the row shows both "Starten" and "Direkt abgeholt"), a cheese toast goes through
+// the whole flow.
 export default function PreOrders() {
   const [orders, setOrders] = useState([])
   const [error, setError] = useState(null)
   const [pickingUp, setPickingUp] = useState(null)
   const [cancelling, setCancelling] = useState(null)
+  const [showPast, setShowPast] = useState(false)
 
   async function reload() {
     try { setOrders(await api('/api/preorders')) } catch (e) { setError(e.message) }
   }
-
   useEffect(() => {
     reload()
-    // light polling so a fresh self-serve order shows up without a manual refresh
-    const t = setInterval(reload, 8000)
+    // small polling so fresh orders and other sellers' status changes show without a refresh
+    const t = setInterval(reload, 6000)
     return () => clearInterval(t)
   }, [])
 
+  async function transition(id, action) {
+    setError(null)
+    try { await api(`/api/preorders/${id}/${action}`, { method: 'POST' }); reload() }
+    catch (e) { setError(e.message) }
+  }
   async function doCancel(id) {
     try { await api(`/api/preorders/${id}/cancel`, { method: 'POST' }); setCancelling(null); reload() }
     catch (e) { setError(e.message) }
   }
 
-  const open = orders.filter((o) => o.status === 'NEW')
-  const done = orders.filter((o) => o.status !== 'NEW')
+  const neu = orders.filter((o) => o.status === 'NEW')
+  const kitchen = orders.filter((o) => o.status === 'IN_PROGRESS')
+  const ready = orders.filter((o) => o.status === 'READY')
+  const past = orders.filter((o) => o.status === 'PICKED_UP' || o.status === 'CANCELLED')
 
   return (
-    <div className="space-y-4">
-      <SectionHeader title="Vorbestellungen" hint="Selbstbedienung vom QR-Code" />
+    <div className="space-y-6">
+      <SectionHeader title="Vorbestellungen" hint="Selbstbedienung vom QR-Code">
+        <div className="text-xs text-gray-500">
+          {neu.length} neu · {kitchen.length} in Küche · {ready.length} fertig
+        </div>
+      </SectionHeader>
 
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
       {orders.length === 0 && !error && (
-        <EmptyState icon={PackageOpen}>Noch keine Vorbestellungen. Sobald jemand den QR-Code scannt, landen die Bestellungen hier.</EmptyState>
+        <EmptyState icon={PackageOpen}>
+          Noch keine Vorbestellungen. Sobald jemand den QR-Code scannt, landen die Bestellungen hier.
+        </EmptyState>
       )}
 
-      {open.length > 0 && (
-        <section>
-          <div className="text-xs font-semibold text-gray-500 mb-1">
-            {open.length} offen{open.length > 1 ? 'e' : ''}
-          </div>
-          <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
-            {open.map((o) => (
-              <OpenRow key={o.id} order={o}
-                       onPickup={() => setPickingUp(o)}
-                       onCancel={() => setCancelling(o)} />
-            ))}
-          </div>
-        </section>
+      {/* the three action columns; stacks on mobile, side by side on lg */}
+      {(neu.length + kitchen.length + ready.length) > 0 && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <StatusColumn
+            title="Neu"
+            hint="gerade vorbestellt"
+            tone="primary"
+            Icon={Clock}
+            orders={neu}
+            renderActions={(o) => (
+              <>
+                <BtnPrimary onClick={() => transition(o.id, 'start')}>
+                  <Flame className="w-4 h-4" /> Starten
+                </BtnPrimary>
+                <BtnGhost onClick={() => setPickingUp(o)}>
+                  <CheckCircle2 className="w-4 h-4" /> Direkt abgeholt
+                </BtnGhost>
+                <BtnLink onClick={() => setCancelling(o)}>Stornieren</BtnLink>
+              </>
+            )}
+          />
+          <StatusColumn
+            title="In Küche"
+            hint="gerade in Vorbereitung"
+            tone="warning"
+            Icon={Flame}
+            orders={kitchen}
+            renderActions={(o) => (
+              <>
+                <BtnPrimary onClick={() => transition(o.id, 'ready')}>
+                  <PlayCircle className="w-4 h-4" /> Fertig
+                </BtnPrimary>
+                <BtnLink onClick={() => setCancelling(o)}>Stornieren</BtnLink>
+              </>
+            )}
+            timestampLabel={(o) => o.startedAt && `seit ${fmtTime(o.startedAt)}${o.startedByName ? ` · ${o.startedByName}` : ''}`}
+          />
+          <StatusColumn
+            title="Fertig"
+            hint="wartet auf Abholung"
+            tone="success"
+            Icon={CheckCircle2}
+            orders={ready}
+            renderActions={(o) => (
+              <BtnPrimary onClick={() => setPickingUp(o)}>
+                <CheckCircle2 className="w-4 h-4" /> Abgeholt
+              </BtnPrimary>
+            )}
+            timestampLabel={(o) => o.readyAt && `fertig seit ${fmtTime(o.readyAt)}`}
+          />
+        </div>
       )}
 
-      {done.length > 0 && (
+      {/* history: collapsed by default so the working columns stay uncluttered */}
+      {past.length > 0 && (
         <section>
-          <div className="text-xs font-semibold text-gray-500 mb-1">Verlauf</div>
-          <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
-            {done.map((o) => <DoneRow key={o.id} order={o} />)}
-          </div>
+          <button onClick={() => setShowPast((s) => !s)}
+                  className="text-xs font-semibold text-gray-500 hover:text-gray-700 flex items-center gap-1">
+            <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showPast ? 'rotate-90' : ''}`} />
+            Verlauf ({past.length})
+          </button>
+          {showPast && (
+            <div className="mt-2 bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+              {past.map((o) => <DoneRow key={o.id} order={o} />)}
+            </div>
+          )}
         </section>
       )}
 
@@ -85,31 +153,46 @@ export default function PreOrders() {
   )
 }
 
-function OpenRow({ order, onPickup, onCancel }) {
+function StatusColumn({ title, hint, tone, Icon, orders, renderActions, timestampLabel }) {
+  const tones = {
+    primary: { bar: 'bg-primary', ring: 'ring-primary/20', pill: 'bg-primary-soft text-primary' },
+    warning: { bar: 'bg-warning', ring: 'ring-warning/20', pill: 'bg-warning-soft text-warning' },
+    success: { bar: 'bg-success', ring: 'ring-success/20', pill: 'bg-success-soft text-success' },
+  }[tone]
   return (
-    <div className="p-3 flex items-center gap-3">
-      <Clock className="w-5 h-5 text-primary shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">
-          {order.quantity}× {order.productName}
-          <span className="text-gray-400 font-normal"> · </span>
-          <span className="text-gray-600">{order.participantName}</span>
-        </div>
-        <div className="text-xs text-gray-500 truncate">
-          vorbestellt {fmtTs(order.createdAt)}
-          {order.requestedFor && ` · für ${fmtTs(order.requestedFor)}`}
-        </div>
-        {order.note && <div className="text-xs text-gray-400 italic">„{order.note}"</div>}
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 px-1">
+        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${tones.pill}`}>
+          <Icon className="w-3.5 h-3.5" /> {title}
+        </span>
+        <span className="text-xs text-gray-400">{hint}</span>
+        <span className="ml-auto text-xs font-semibold text-gray-400">{orders.length}</span>
       </div>
-      <div className="text-right shrink-0">
-        <div className="font-semibold">{fmt(order.totalAmount)}</div>
-      </div>
-      <div className="flex flex-col gap-1 shrink-0">
-        <button onClick={onPickup}
-                className="bg-primary text-white rounded-lg px-3 py-1.5 text-sm font-semibold flex items-center gap-1">
-          <CheckCircle2 className="w-4 h-4" /> Abgeholt
-        </button>
-        <button onClick={onCancel} className="text-xs text-gray-400 hover:text-accent">Stornieren</button>
+      <div className="space-y-2">
+        {orders.length === 0
+          ? <div className="text-xs text-gray-300 border border-dashed border-gray-200 rounded-xl p-4 text-center">—</div>
+          : orders.map((o) => (
+              <div key={o.id} className={`bg-white rounded-xl shadow-sm p-3 space-y-2 ring-1 ${tones.ring}`}>
+                <div className="flex items-start gap-2">
+                  <div className={`w-1 self-stretch rounded-full ${tones.bar}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">
+                      {o.quantity}× {o.productName}
+                    </div>
+                    <div className="text-xs text-gray-600 truncate">{o.participantName}</div>
+                    <div className="text-[11px] text-gray-400">
+                      {timestampLabel?.(o) ?? `vorbestellt ${fmtTime(o.createdAt)}`}
+                      {o.requestedFor && ` · für ${fmtTime(o.requestedFor)}`}
+                    </div>
+                    {o.note && <div className="text-xs text-gray-500 italic mt-0.5">„{o.note}"</div>}
+                  </div>
+                  <div className="font-semibold shrink-0">{fmt(o.totalAmount)}</div>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1 border-t border-gray-100">
+                  {renderActions(o)}
+                </div>
+              </div>
+            ))}
       </div>
     </div>
   )
@@ -118,7 +201,7 @@ function OpenRow({ order, onPickup, onCancel }) {
 function DoneRow({ order }) {
   const done = order.status === 'PICKED_UP'
   return (
-    <div className={`p-3 flex items-center gap-3 opacity-60 ${done ? '' : ''}`}>
+    <div className="p-3 flex items-center gap-3 opacity-70">
       {done ? <CheckCircle2 className="w-5 h-5 text-success shrink-0" /> : <X className="w-5 h-5 text-gray-400 shrink-0" />}
       <div className="flex-1 min-w-0">
         <div className={`font-medium truncate ${done ? 'line-through decoration-gray-300' : ''}`}>
@@ -126,7 +209,7 @@ function DoneRow({ order }) {
         </div>
         <div className="text-xs text-gray-500 truncate">
           {done
-            ? <>abgeholt {fmtTs(order.pickedUpAt)}{order.pickedUpByName ? ` · ${order.pickedUpByName}` : ''}</>
+            ? <>abgeholt {fmtTime(order.pickedUpAt)}{order.pickedUpByName ? ` · ${order.pickedUpByName}` : ''}</>
             : 'storniert'}
         </div>
       </div>
@@ -212,6 +295,27 @@ function MethodButton({ active, onClick, children }) {
   )
 }
 
-function fmtTs(ts) {
-  return new Date(ts).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+// Small action-button flavours - keep the kitchen cards readable
+function BtnPrimary({ onClick, children }) {
+  return (
+    <button onClick={onClick}
+            className="flex-1 bg-primary text-white rounded-lg px-3 py-1.5 text-sm font-semibold flex items-center justify-center gap-1">
+      {children}
+    </button>
+  )
+}
+function BtnGhost({ onClick, children }) {
+  return (
+    <button onClick={onClick}
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-gray-50 flex items-center justify-center gap-1">
+      {children}
+    </button>
+  )
+}
+function BtnLink({ onClick, children }) {
+  return <button onClick={onClick} className="text-xs text-gray-400 hover:text-accent">{children}</button>
+}
+
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })
 }

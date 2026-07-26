@@ -42,6 +42,7 @@ public class PreOrderService {
     private final AuditService auditService;
     private final JwtService jwtService;
     private final TransactionTemplate transactionTemplate;
+    private final PreOrderNotifier notifier;
 
     // -------------------- Public: camp lookup + identify ----------------------
 
@@ -137,19 +138,23 @@ public class PreOrderService {
                 "Menge: " + saved.getQuantity()
                         + (saved.getRequestedFor() != null ? "; für " + saved.getRequestedFor() : "")
                         + (saved.getNote() != null ? "; Notiz: " + saved.getNote() : ""));
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
-    /** Participants can cancel THEIR OWN order while it's still NEW - safety net if they change their mind. */
+    /**
+     * Participants can cancel THEIR OWN order while the kitchen hasn't marked it ready.
+     * Once it's READY somebody's already made the toast - a self-cancel from a phone at
+     * that point would waste food, so cancellation from there is up to staff.
+     */
     public PreOrderResponse cancelMine(Participant currentParticipant, Long orderId) {
         PreOrder o = preOrderRepository.findById(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Nicht gefunden"));
         if (!o.getParticipant().getId().equals(currentParticipant.getId())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Nicht gefunden");
         }
-        if (o.getStatus() != PreOrder.Status.NEW) {
+        if (o.getStatus() != PreOrder.Status.NEW && o.getStatus() != PreOrder.Status.IN_PROGRESS) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Nur offene Bestellungen können storniert werden");
+                    "Nur offene oder in Vorbereitung befindliche Bestellungen können storniert werden");
         }
         return doCancel(null, o);
     }
@@ -162,14 +167,44 @@ public class PreOrderService {
                 .map(PreOrderResponse::from).toList();
     }
 
-    /** Staff cancel - e.g. product ran out. */
+    /** Staff cancel - e.g. product ran out. Allowed while not yet picked up. */
     public PreOrderResponse staffCancel(User currentUser, Long orderId) {
         PreOrder o = loadCheckedStaff(currentUser, orderId);
-        if (o.getStatus() != PreOrder.Status.NEW) {
+        if (o.getStatus() == PreOrder.Status.PICKED_UP || o.getStatus() == PreOrder.Status.CANCELLED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Nur offene Bestellungen können storniert werden");
+                    "Diese Bestellung ist bereits abgeholt oder storniert");
         }
         return doCancel(currentUser, o);
+    }
+
+    /** Kitchen starts preparing: NEW → IN_PROGRESS. */
+    public PreOrderResponse start(User currentUser, Long orderId) {
+        PreOrder o = loadCheckedStaff(currentUser, orderId);
+        requireStatus(o, PreOrder.Status.NEW, "Nur neue Bestellungen können gestartet werden");
+        o.setStatus(PreOrder.Status.IN_PROGRESS);
+        o.setStartedAt(LocalDateTime.now());
+        o.setStartedBy(currentUser);
+        PreOrder saved = preOrderRepository.save(o);
+        auditService.record(currentUser, o.getCamp(), EntityType.PRE_ORDER, saved.getId(),
+                orderLabel(saved), Action.STARTED, null);
+        return finalizeAndPublish(saved);
+    }
+
+    /** Kitchen finishes: IN_PROGRESS → READY (or NEW → READY as a fast-forward). */
+    public PreOrderResponse markReady(User currentUser, Long orderId) {
+        PreOrder o = loadCheckedStaff(currentUser, orderId);
+        if (o.getStatus() != PreOrder.Status.NEW && o.getStatus() != PreOrder.Status.IN_PROGRESS) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Diese Bestellung ist nicht mehr in Vorbereitung");
+        }
+        // fast-forward from NEW skips the started_at bookkeeping but records the transition
+        o.setStatus(PreOrder.Status.READY);
+        o.setReadyAt(LocalDateTime.now());
+        o.setReadyBy(currentUser);
+        PreOrder saved = preOrderRepository.save(o);
+        auditService.record(currentUser, o.getCamp(), EntityType.PRE_ORDER, saved.getId(),
+                orderLabel(saved), Action.READY, null);
+        return finalizeAndPublish(saved);
     }
 
     /**
@@ -191,7 +226,9 @@ public class PreOrderService {
 
     private PreOrderResponse doPickup(User currentUser, Long orderId, PickupRequest request) {
         PreOrder o = loadCheckedStaff(currentUser, orderId);
-        if (o.getStatus() != PreOrder.Status.NEW) {
+        // pickup is allowed from NEW / IN_PROGRESS / READY — a snickers goes NEW → PICKED_UP
+        // directly, a toast comes through the whole kitchen flow first
+        if (o.getStatus() == PreOrder.Status.PICKED_UP || o.getStatus() == PreOrder.Status.CANCELLED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Diese Bestellung ist bereits abgeholt oder storniert");
         }
@@ -223,7 +260,7 @@ public class PreOrderService {
                         + "; bezahlt: " + split.paidCash() + " € bar"
                         + ", " + split.paidFromBalance() + " € Guthaben"
                         + ", " + split.debtAmount() + " € Schulden");
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     // -------------------- Admin: QR + windows --------------------------------
@@ -270,7 +307,7 @@ public class PreOrderService {
                 o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName()
                         + " → " + o.getProductName(),
                 Action.CANCELLED, null);
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     private PreOrder loadCheckedStaff(User currentUser, Long id) {
@@ -278,6 +315,24 @@ public class PreOrderService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Nicht gefunden"));
         campAccess.checkSameCamp(currentUser, o.getCamp());
         return o;
+    }
+
+    private static void requireStatus(PreOrder o, PreOrder.Status expected, String messageIfNot) {
+        if (o.getStatus() != expected) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, messageIfNot);
+        }
+    }
+
+    private static String orderLabel(PreOrder o) {
+        return o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName()
+                + " → " + o.getProductName();
+    }
+
+    /** Serialise once + push to any connected participant devices, then return. */
+    private PreOrderResponse finalizeAndPublish(PreOrder saved) {
+        PreOrderResponse r = PreOrderResponse.from(saved);
+        notifier.publish(r);
+        return r;
     }
 
     // A window with both edges null (or where open == close) means "always open".
