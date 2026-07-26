@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, CheckCircle2, Search, UserRound, X } from 'lucide-react'
+import { ArrowLeft, Check, CheckCircle2, Search, Undo2, UserRound, X } from 'lucide-react'
 import { api } from '../api'
 import { fmt } from '../money'
 import { SectionHeader } from '../components/ui'
@@ -47,6 +47,18 @@ export default function PreOrderWalk() {
       reset()
     } catch (e) { setError(e.message); setBusy(false); return }
     setBusy(false)
+  }
+
+  // Undo the last order this session — cancels the underlying PreOrder if it's still NEW.
+  // If the kitchen has already started on it, the server refuses and we surface the message
+  // rather than silently pretending it worked.
+  async function undoLast() {
+    const last = taken[0]
+    if (!last) return
+    try {
+      await api(`/api/preorders/${last.id}/cancel`, { method: 'POST' })
+      setTaken((prev) => prev.slice(1))
+    } catch (e) { setError(e.message) }
   }
 
   // group by category the same way the till does, so a seller who knows both flows
@@ -137,10 +149,17 @@ export default function PreOrderWalk() {
       {/* Session tape — what has been placed in this rundgang */}
       {taken.length > 0 && (
         <section className="pt-2">
-          <div className="text-xs font-semibold text-gray-500 mb-1">In diesem Rundgang</div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-xs font-semibold text-gray-500">In diesem Rundgang</div>
+            <button onClick={undoLast}
+                    className="text-xs text-gray-400 hover:text-accent flex items-center gap-1"
+                    title="Letzte Bestellung stornieren">
+              <Undo2 className="w-3.5 h-3.5" /> Letzte rückgängig
+            </button>
+          </div>
           <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
-            {taken.map((t) => (
-              <div key={t.id} className="p-2.5 flex items-center gap-2 text-sm">
+            {taken.map((t, i) => (
+              <div key={t.id} className={`p-2.5 flex items-center gap-2 text-sm ${i === 0 ? '' : 'opacity-70'}`}>
                 <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
                 <span className="truncate">{t.quantity}× {t.productName} <span className="text-gray-400">·</span> {t.participantName}</span>
               </div>
