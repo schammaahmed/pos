@@ -9,6 +9,7 @@ import Products from './pages/Products'
 import Review from './pages/Review'
 import SalesLog from './pages/SalesLog'
 import Admin from './pages/Admin'
+import Aktionen from './pages/Aktionen'
 import Overview from './pages/Overview'
 
 // where "/" should take you, depending on who you are. A super admin oversees every
@@ -34,6 +35,7 @@ export default function App() {
               <Route path="/products" element={<Products />} />
               <Route path="/review" element={<Review />} />
               <Route path="/sales" element={<SalesLog />} />
+              <Route path="/aktionen" element={<Aktionen />} />
               <Route path="/admin" element={<Admin />} />
             </Route>
             <Route path="/" element={<Home />} />

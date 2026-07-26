@@ -28,9 +28,10 @@ public class CashDtos {
     public record CashBook(
             BigDecimal startingCash,   // Startgeld / float
             BigDecimal cashSales,      // Bar eingenommen aus Verkäufen
+            BigDecimal specialsCash,   // Bar eingenommen aus Vorbestell-Ausgaben (Aktionen)
             BigDecimal deposits,       // Nachlagen
             BigDecimal withdrawals,    // Entnahmen
-            BigDecimal expected,       // Soll = start + sales + deposits - withdrawals
+            BigDecimal expected,       // Soll = start + sales + specials + deposits - withdrawals
             java.util.List<CashMovementResponse> movements
     ) {}
 
