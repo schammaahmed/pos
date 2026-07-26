@@ -4,6 +4,7 @@ import { ArrowLeft, Check, CheckCircle2, Undo2, UserRound, X } from 'lucide-reac
 import { api } from '../api'
 import { fmt } from '../money'
 import { SectionHeader } from '../components/ui'
+import { groupByCategory } from '../products'
 import ParticipantPickerSheet from '../components/ParticipantPickerSheet'
 
 // "Rundgang" mode: a seller loops through the bus/dorm taking pre-orders.
@@ -200,14 +201,4 @@ export default function PreOrderWalk() {
       )}
     </div>
   )
-}
-
-function groupByCategory(products) {
-  const map = new Map()
-  for (const p of products) {
-    const key = p.category ?? ''
-    if (!map.has(key)) map.set(key, [])
-    map.get(key).push(p)
-  }
-  return [...map.entries()]
 }
