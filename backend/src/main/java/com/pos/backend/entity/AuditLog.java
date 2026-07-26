@@ -29,7 +29,7 @@ public class AuditLog {
         SOLD, FLAGGED, REVERSED, REVIEWED,
         IMPORTED,
         RESERVED, COLLECTED, CANCELLED, CLOSED,
-        PICKED_UP
+        PICKED_UP, STARTED, READY
     }
 
     @Id

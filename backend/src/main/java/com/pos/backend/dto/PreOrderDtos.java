@@ -84,8 +84,12 @@ public class PreOrderDtos {
             BigDecimal totalAmount,
             LocalDateTime requestedFor,
             String note,
-            String status,                // NEW / PICKED_UP / CANCELLED
+            String status,                // NEW / IN_PROGRESS / READY / PICKED_UP / CANCELLED
             LocalDateTime createdAt,
+            LocalDateTime startedAt,
+            String startedByName,
+            LocalDateTime readyAt,
+            String readyByName,
             LocalDateTime pickedUpAt,
             String pickedUpByName,
             // staff-facing extras (safe to expose to the participant too - it's their own row):
@@ -108,13 +112,16 @@ public class PreOrderDtos {
                     o.getNote(),
                     o.getStatus().name(),
                     o.getCreatedAt(),
-                    o.getPickedUpAt(),
-                    o.getPickedUpBy() != null
-                            ? o.getPickedUpBy().getFirstName() + " " + o.getPickedUpBy().getLastName()
-                            : null,
+                    o.getStartedAt(), nameOrNull(o.getStartedBy()),
+                    o.getReadyAt(), nameOrNull(o.getReadyBy()),
+                    o.getPickedUpAt(), nameOrNull(o.getPickedUpBy()),
                     o.getParticipant().getId(),
                     o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName(),
                     o.getPaidCash(), o.getPaidFromBalance(), o.getDebtAmount());
+        }
+
+        private static String nameOrNull(com.pos.backend.entity.User u) {
+            return u == null ? null : u.getFirstName() + " " + u.getLastName();
         }
     }
 

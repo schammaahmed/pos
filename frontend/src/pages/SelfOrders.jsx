@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Clock, PackageOpen, X } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Clock, Flame, PackageOpen, X } from 'lucide-react'
 import { selfApi, loadSelf } from '../selfApi'
 import { fmt } from '../money'
 import { SelfShell } from './Self'
@@ -31,8 +31,11 @@ export default function SelfOrders() {
     catch (e) { setError(e.message) }
   }
 
-  const active = orders.filter((o) => o.status === 'NEW')
-  const past = orders.filter((o) => o.status !== 'NEW')
+  // active = anything that hasn't reached a terminal state yet, so the participant sees
+  // their whole in-flight pipeline (Wartet → In Vorbereitung → Fertig) not just NEW
+  const ACTIVE = new Set(['NEW', 'IN_PROGRESS', 'READY'])
+  const active = orders.filter((o) => ACTIVE.has(o.status))
+  const past = orders.filter((o) => !ACTIVE.has(o.status))
 
   return (
     <SelfShell>
@@ -81,8 +84,13 @@ export default function SelfOrders() {
 function OrderCard({ order, onCancel }) {
   const done = order.status === 'PICKED_UP'
   const cancelled = order.status === 'CANCELLED'
+  const ready = order.status === 'READY'
+  // once the kitchen has said Fertig, cancelling from a phone would waste food -
+  // the backend refuses it too; hide the button so nothing looks half-broken
+  const canCancel = onCancel && !done && !cancelled && !ready
+
   return (
-    <div className={`bg-white rounded-xl shadow-sm p-3 ${done || cancelled ? 'opacity-70' : ''}`}>
+    <div className={`rounded-xl shadow-sm p-3 ${done || cancelled ? 'bg-white opacity-70' : ready ? 'bg-success-soft ring-1 ring-success/30' : 'bg-white'}`}>
       <div className="flex items-center gap-3">
         <StatusIcon status={order.status} />
         <div className="flex-1 min-w-0">
@@ -90,11 +98,11 @@ function OrderCard({ order, onCancel }) {
             {order.quantity}× {order.productName}
           </div>
           <div className="text-xs text-gray-500 truncate">
-            {done
-              ? <>abgeholt {fmtTs(order.pickedUpAt)}{order.pickedUpByName ? ` · ${order.pickedUpByName}` : ''}</>
-              : cancelled
-                ? 'storniert'
-                : <>vorbestellt {fmtTs(order.createdAt)}{order.requestedFor ? ` · für ${fmtTs(order.requestedFor)}` : ''}</>}
+            {done && <>abgeholt {fmtTs(order.pickedUpAt)}{order.pickedUpByName ? ` · ${order.pickedUpByName}` : ''}</>}
+            {!done && cancelled && 'storniert'}
+            {!done && !cancelled && ready && <span className="text-success font-semibold">Fertig zur Abholung!</span>}
+            {!done && !cancelled && order.status === 'IN_PROGRESS' && <>in Vorbereitung seit {fmtTs(order.startedAt)}</>}
+            {!done && !cancelled && order.status === 'NEW' && <>vorbestellt {fmtTs(order.createdAt)}{order.requestedFor ? ` · für ${fmtTs(order.requestedFor)}` : ''}</>}
           </div>
           {order.note && <div className="text-xs text-gray-400 italic mt-0.5">„{order.note}"</div>}
         </div>
@@ -107,7 +115,7 @@ function OrderCard({ order, onCancel }) {
           )}
         </div>
       </div>
-      {!done && !cancelled && onCancel && (
+      {canCancel && (
         <div className="mt-2 pt-2 border-t border-gray-100 text-right">
           <button onClick={onCancel} className="text-xs text-gray-400 hover:text-accent">Stornieren</button>
         </div>
@@ -119,6 +127,8 @@ function OrderCard({ order, onCancel }) {
 function StatusIcon({ status }) {
   if (status === 'PICKED_UP') return <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
   if (status === 'CANCELLED') return <X className="w-5 h-5 text-gray-400 shrink-0" />
+  if (status === 'READY') return <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
+  if (status === 'IN_PROGRESS') return <Flame className="w-5 h-5 text-warning shrink-0" />
   return <Clock className="w-5 h-5 text-primary shrink-0" />
 }
 
