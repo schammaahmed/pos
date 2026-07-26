@@ -23,17 +23,19 @@ public interface SpecialOrderRepository extends JpaRepository<SpecialOrder, Long
             """)
     int sumTakenForSpecial(@Param("specialId") Long specialId);
 
-    // The Ausgabe view: RESERVED orders for a given collection day in one camp, so the
-    // seller can hand out today's specials and mark them as collected.
+    // The Ausgabe view: everything due on a given day in one camp - both RESERVED (to
+    // hand out) and COLLECTED (already handed out), so the seller sees the day's full
+    // picture. Cancelled orders are dropped: they were actively dismissed and would
+    // just be noise. RESERVED sorts before COLLECTED so open work is on top.
     @Query("""
             SELECT o FROM SpecialOrder o
             WHERE o.special.camp.id = :campId
               AND o.special.collectionDate = :day
-              AND o.status = com.pos.backend.entity.SpecialOrder$Status.RESERVED
-            ORDER BY o.special.name, o.participant.lastName, o.participant.firstName
+              AND o.status <> com.pos.backend.entity.SpecialOrder$Status.CANCELLED
+            ORDER BY o.status ASC, o.special.name, o.participant.lastName, o.participant.firstName
             """)
-    List<SpecialOrder> findReservedForCollectionDay(@Param("campId") Long campId,
-                                                    @Param("day") LocalDate day);
+    List<SpecialOrder> findForCollectionDay(@Param("campId") Long campId,
+                                            @Param("day") LocalDate day);
 
     // Cash taken in via Special collections - the cash box has to count this too, otherwise
     // Soll-Ist reconciliation is short by whatever the Specials brought in that day.

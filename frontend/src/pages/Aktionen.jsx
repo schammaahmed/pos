@@ -270,34 +270,51 @@ function CollectView() {
       {error && <ErrorBar message={error} />}
 
       {orders.length === 0 ? (
-        <EmptyState icon={PackageOpen}>Keine offenen Vorbestellungen für diesen Tag.</EmptyState>
+        <EmptyState icon={PackageOpen}>Keine Vorbestellungen für diesen Tag.</EmptyState>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
-          {orders.map((o) => (
-            <div key={o.id} className="p-3 flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">
-                  {o.quantity}× {o.specialName} <span className="text-gray-400 font-normal">·</span>{' '}
-                  <span className="text-gray-600">{o.participantName}</span>
+        <>
+          {/* count line so it's obvious at a glance how much is still open vs done */}
+          <div className="text-xs text-gray-500">
+            {orders.filter((o) => o.status === 'RESERVED').length} offen
+            {' · '}
+            {orders.filter((o) => o.status === 'COLLECTED').length} ausgegeben
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+            {orders.map((o) => {
+              const done = o.status === 'COLLECTED'
+              return (
+                <div key={o.id} className={`p-3 flex items-center gap-3 ${done ? 'opacity-60' : ''}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className={`font-medium truncate flex items-center gap-1.5 ${done ? 'line-through decoration-gray-300' : ''}`}>
+                      {done && <CheckCircle2 className="w-4 h-4 text-success shrink-0" />}
+                      {o.quantity}× {o.specialName} <span className="text-gray-400 font-normal">·</span>{' '}
+                      <span className="text-gray-600">{o.participantName}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {done
+                        ? <>ausgegeben {new Date(o.collectedAt).toLocaleString('de-AT', { hour: '2-digit', minute: '2-digit' })} · {o.collectedByName}</>
+                        : <>vorbestellt {new Date(o.createdAt).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {o.createdByName}</>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-semibold">{fmt(o.totalAmount)}</div>
+                  </div>
+                  {!done && (
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button onClick={() => setCollecting(o)}
+                              className="bg-primary text-white rounded-lg px-3 py-1.5 text-sm font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> Ausgeben
+                      </button>
+                      <button onClick={() => setCancelling(o)}
+                              className="text-xs text-gray-400 hover:text-accent">Stornieren</button>
+                    </div>
+                  )}
                 </div>
-                <div className="text-xs text-gray-500 truncate">
-                  vorbestellt {new Date(o.createdAt).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {o.createdByName}
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="font-semibold">{fmt(o.totalAmount)}</div>
-              </div>
-              <div className="flex flex-col gap-1 shrink-0">
-                <button onClick={() => setCollecting(o)}
-                        className="bg-primary text-white rounded-lg px-3 py-1.5 text-sm font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-4 h-4" /> Ausgeben
-                </button>
-                <button onClick={() => setCancelling(o)}
-                        className="text-xs text-gray-400 hover:text-accent">Stornieren</button>
-              </div>
-            </div>
-          ))}
-        </div>
+              )
+            })}
+          </div>
+        </>
       )}
 
       {collecting && (

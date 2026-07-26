@@ -133,11 +133,13 @@ public class SpecialService {
         return SpecialOrderResponse.from(saved);
     }
 
-    // The Ausgabe (collection) list for a specific day - defaults to today.
+    // The Ausgabe (collection) list for a specific day - defaults to today. Includes
+    // both open (RESERVED) and already-collected orders so the seller can see the day's
+    // full picture instead of a mysteriously-empty screen after handing out the last one.
     public List<SpecialOrderResponse> collectionList(User currentUser, Long campId, LocalDate day) {
         Camp camp = campAccess.resolveCamp(currentUser, campId);
         LocalDate when = day != null ? day : LocalDate.now();
-        return orderRepository.findReservedForCollectionDay(camp.getId(), when).stream()
+        return orderRepository.findForCollectionDay(camp.getId(), when).stream()
                 .map(SpecialOrderResponse::from).toList();
     }
 
