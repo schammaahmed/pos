@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Banknote, Coins, Crown, Euro, LayoutDashboard, Lightbulb, Package, PackageOpen, Receipt,
-  Tent, TrendingDown, Trophy, UserRound, Users,
+  Banknote, Coins, Crown, Euro, LayoutDashboard, Lightbulb, Package, PackageOpen, QrCode,
+  Receipt, RefreshCw, Tent, TrendingDown, Trophy, UserRound, Users,
 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth, roleLabel } from '../auth'
@@ -232,6 +233,7 @@ export default function Admin() {
     { id: 'team', label: 'Team', Icon: Users },
     { id: 'cash', label: 'Kasse', Icon: Coins },
     { id: 'specials', label: 'Aktionen', Icon: PackageOpen },
+    { id: 'selfserve', label: 'Selbstbedienung', Icon: QrCode },
     ...(isSuper ? [{ id: 'camps', label: 'Camps', Icon: Package }] : []),
   ]
 
@@ -383,6 +385,8 @@ export default function Admin() {
       {tab === 'cash' && activeCampId && <CashBox campId={activeCampId} />}
 
       {tab === 'specials' && activeCampId && <SpecialsAdmin />}
+
+      {tab === 'selfserve' && activeCampId && <SelfServeAdmin />}
 
       {/* camps - super admin manages, and creates/closes them here */}
       {tab === 'camps' && (
@@ -769,5 +773,118 @@ function SpecialForm({ onClose, onSaved }) {
         </div>
       </form>
     </div>
+  )
+}
+
+// -------- Self-service admin: the QR to display at the stand + open hours ---
+function SelfServeAdmin() {
+  const [cfg, setCfg] = useState(null)
+  const [openFrom, setOpenFrom] = useState('')
+  const [openUntil, setOpenUntil] = useState('')
+  const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [confirmRotate, setConfirmRotate] = useState(false)
+
+  async function load() {
+    try {
+      const c = await api('/api/preorders/config')
+      setCfg(c)
+      setOpenFrom(c.openFrom ? String(c.openFrom).slice(0, 5) : '')
+      setOpenUntil(c.openUntil ? String(c.openUntil).slice(0, 5) : '')
+    } catch (e) { setError(e.message) }
+  }
+  useEffect(() => { load() }, [])
+
+  async function save(rotateToken) {
+    setSaving(true); setError(null)
+    try {
+      const c = await api('/api/preorders/config', {
+        method: 'PUT',
+        body: {
+          openFrom: openFrom || null,
+          openUntil: openUntil || null,
+          rotateToken: Boolean(rotateToken),
+        },
+      })
+      setCfg(c)
+      setConfirmRotate(false)
+    } catch (e) { setError(e.message) }
+    setSaving(false)
+  }
+
+  if (!cfg) return null
+
+  // The URL the QR encodes. window.location.origin makes it work on the sandbox and
+  // production without a config knob - whatever host the admin loaded the app from.
+  const url = `${window.location.origin}/self?t=${cfg.selfServeToken}`
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="font-bold text-lg">Selbstbedienung</h2>
+        <p className="text-xs text-gray-500">
+          Teilnehmer:innen scannen den QR am Stand, geben ihren Namen ein und können dann eigenständig
+          vorbestellen. Bezahlt wird bei der Abholung – siehe Panel „Vorbestellungen".
+        </p>
+      </div>
+
+      {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* QR card */}
+        <div className="bg-white rounded-xl shadow-sm p-4 flex flex-col items-center gap-3">
+          <div className="p-3 bg-white rounded-lg" style={{ border: '1px solid #eee' }}>
+            <QRCodeSVG value={url} size={192} level="M" />
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-gray-400">Ziel-Adresse (zum Testen)</div>
+            <a href={url} target="_blank" rel="noreferrer"
+               className="text-sm text-primary break-all hover:underline">{url}</a>
+          </div>
+          <button onClick={() => setConfirmRotate(true)}
+                  className="text-xs text-gray-400 hover:text-accent flex items-center gap-1">
+            <RefreshCw className="w-3.5 h-3.5" /> Neuen QR-Code erzeugen (alten deaktivieren)
+          </button>
+        </div>
+
+        {/* Windows */}
+        <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <div>
+            <div className="font-medium">Öffnungszeiten</div>
+            <p className="text-xs text-gray-500">
+              Wenn beide leer sind, ist die Selbstbedienung immer geöffnet (solange das Camp aktiv ist).
+              Eine Zeit von 22:00 bis 02:00 gilt über Mitternacht.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm text-gray-600">
+              Offen ab
+              <input type="time" value={openFrom} onChange={(e) => setOpenFrom(e.target.value)}
+                     className="w-full border rounded-lg px-3 py-2 mt-1" />
+            </label>
+            <label className="block text-sm text-gray-600">
+              Offen bis
+              <input type="time" value={openUntil} onChange={(e) => setOpenUntil(e.target.value)}
+                     className="w-full border rounded-lg px-3 py-2 mt-1" />
+            </label>
+          </div>
+          <button onClick={() => save(false)} disabled={saving}
+                  className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-40">
+            Speichern
+          </button>
+        </div>
+      </div>
+
+      {confirmRotate && (
+        <ConfirmDialog
+          title="Neuen QR-Code erzeugen"
+          message="Der bisherige QR-Code wird sofort ungültig. Ausgedruckte oder verteilte QR-Codes müssen neu gemacht werden."
+          confirmLabel="Neuen Code erzeugen"
+          tone="danger"
+          onConfirm={() => save(true)}
+          onClose={() => setConfirmRotate(false)}
+        />
+      )}
+    </section>
   )
 }

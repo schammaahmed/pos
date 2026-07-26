@@ -5,6 +5,7 @@ import com.pos.backend.entity.*;
 import com.pos.backend.entity.AuditLog.Action;
 import com.pos.backend.entity.AuditLog.EntityType;
 import com.pos.backend.repository.CashMovementRepository;
+import com.pos.backend.repository.PreOrderRepository;
 import com.pos.backend.repository.SaleRepository;
 import com.pos.backend.repository.SpecialOrderRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class CashService {
     private final CashMovementRepository cashMovementRepository;
     private final SaleRepository saleRepository;
     private final SpecialOrderRepository specialOrderRepository;
+    private final PreOrderRepository preOrderRepository;
     private final CampAccess campAccess;
     private final AuditService auditService;
 
@@ -40,11 +42,14 @@ public class CashService {
         // Specials go through their own row (not Sale), so their cash lives in the SpecialOrder
         // table and must be summed in separately, otherwise the reconciliation is short
         BigDecimal specialsCash = orZero(specialOrderRepository.sumCollectedCashByCamp(camp.getId()));
+        // Same story for self-serve pre-orders - a picked-up PreOrder can take cash
+        BigDecimal preordersCash = orZero(preOrderRepository.sumPickedUpCashByCamp(camp.getId()));
 
         BigDecimal start = orZero(camp.getStartingCash());
-        BigDecimal expected = start.add(cashSales).add(specialsCash).add(deposits).subtract(withdrawals);
+        BigDecimal expected = start.add(cashSales).add(specialsCash).add(preordersCash)
+                .add(deposits).subtract(withdrawals);
 
-        return new CashBook(start, cashSales, specialsCash, deposits, withdrawals, expected,
+        return new CashBook(start, cashSales, specialsCash, preordersCash, deposits, withdrawals, expected,
                 movements.stream().map(CashMovementResponse::from).toList());
     }
 
