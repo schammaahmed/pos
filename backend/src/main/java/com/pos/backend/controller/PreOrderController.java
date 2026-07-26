@@ -27,6 +27,14 @@ public class PreOrderController {
         return preOrderService.staffQueue(currentUser, campId);
     }
 
+    // Staff walk-through: a seller records a pre-order on a participant's behalf while
+    // walking through the bus. Same result as a self-serve order, different entry path.
+    @PostMapping
+    public PreOrderResponse staffPlace(@AuthenticationPrincipal User currentUser,
+                                       @Valid @RequestBody StaffPlaceRequest request) {
+        return preOrderService.staffPlace(currentUser, request);
+    }
+
     // Kitchen transitions. Both are no-body POSTs so they read like the actions they are
     // (see docs at /api/preorders): start = "in Vorbereitung", ready = "abholbereit".
     @PostMapping("/{id}/start")

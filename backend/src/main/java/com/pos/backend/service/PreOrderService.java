@@ -142,6 +142,43 @@ public class PreOrderService {
     }
 
     /**
+     * Staff walk-through order entry: a seller loops through the bus and takes orders
+     * on the participants' behalf. Same flow as self-serve place() but the seller picks
+     * the participant instead of a JWT identifying them. Order windows are IGNORED here
+     * — a lead sitting on a bus doing the rounds is already staff overriding the schedule.
+     */
+    public PreOrderResponse staffPlace(User currentUser, StaffPlaceRequest request) {
+        Participant participant = participantRepository.findById(request.participantId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Teilnehmer nicht gefunden"));
+        campAccess.checkSameCamp(currentUser, participant.getCamp());
+        Camp camp = participant.getCamp();
+        campAccess.checkCampActive(camp);
+
+        Product product = productRepository.findById(request.productId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produkt nicht gefunden"));
+        if (!product.getCamp().getId().equals(camp.getId()) || !product.isActive()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Produkt nicht gefunden");
+        }
+
+        PreOrder o = new PreOrder();
+        o.setCamp(camp);
+        o.setParticipant(participant);
+        o.setProduct(product);
+        o.setProductName(product.getName());
+        o.setUnitPrice(product.getPrice());
+        o.setQuantity(request.quantity());
+        o.setRequestedFor(request.requestedFor());
+        o.setNote(request.note());
+        PreOrder saved = preOrderRepository.save(o);
+
+        auditService.record(currentUser, camp, EntityType.PRE_ORDER, saved.getId(),
+                orderLabel(saved), Action.CREATED,
+                "Menge: " + saved.getQuantity() + " (Rundgang durch " + currentUser.getFirstName() + ")"
+                        + (saved.getNote() != null ? "; Notiz: " + saved.getNote() : ""));
+        return finalizeAndPublish(saved);
+    }
+
+    /**
      * Participants can cancel THEIR OWN order while the kitchen hasn't marked it ready.
      * Once it's READY somebody's already made the toast - a self-cancel from a phone at
      * that point would waste food, so cancellation from there is up to staff.
