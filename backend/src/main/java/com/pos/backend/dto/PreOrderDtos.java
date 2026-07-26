@@ -72,6 +72,17 @@ public class PreOrderDtos {
             @Size(max = 300) String note  // optional: "ohne Zwiebel"
     ) {}
 
+    // Staff-issued variant: a seller walks the bus, takes orders on the participants'
+    // behalf. Same shape as PlaceOrderRequest but with an explicit participantId (the
+    // seller taps them, they don't identify themselves).
+    public record StaffPlaceRequest(
+            @NotNull Long participantId,
+            @NotNull Long productId,
+            @Min(1) int quantity,
+            LocalDateTime requestedFor,
+            @Size(max = 300) String note
+    ) {}
+
     // -------------------- Shared (participant + staff) ---------------------
 
     /** One pre-order row - used by both the participant's "meine Bestellungen" and the staff queue. */
@@ -84,8 +95,12 @@ public class PreOrderDtos {
             BigDecimal totalAmount,
             LocalDateTime requestedFor,
             String note,
-            String status,                // NEW / PICKED_UP / CANCELLED
+            String status,                // NEW / IN_PROGRESS / READY / PICKED_UP / CANCELLED
             LocalDateTime createdAt,
+            LocalDateTime startedAt,
+            String startedByName,
+            LocalDateTime readyAt,
+            String readyByName,
             LocalDateTime pickedUpAt,
             String pickedUpByName,
             // staff-facing extras (safe to expose to the participant too - it's their own row):
@@ -108,13 +123,16 @@ public class PreOrderDtos {
                     o.getNote(),
                     o.getStatus().name(),
                     o.getCreatedAt(),
-                    o.getPickedUpAt(),
-                    o.getPickedUpBy() != null
-                            ? o.getPickedUpBy().getFirstName() + " " + o.getPickedUpBy().getLastName()
-                            : null,
+                    o.getStartedAt(), nameOrNull(o.getStartedBy()),
+                    o.getReadyAt(), nameOrNull(o.getReadyBy()),
+                    o.getPickedUpAt(), nameOrNull(o.getPickedUpBy()),
                     o.getParticipant().getId(),
                     o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName(),
                     o.getPaidCash(), o.getPaidFromBalance(), o.getDebtAmount());
+        }
+
+        private static String nameOrNull(com.pos.backend.entity.User u) {
+            return u == null ? null : u.getFirstName() + " " + u.getLastName();
         }
     }
 

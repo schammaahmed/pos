@@ -42,6 +42,7 @@ public class PreOrderService {
     private final AuditService auditService;
     private final JwtService jwtService;
     private final TransactionTemplate transactionTemplate;
+    private final PreOrderNotifier notifier;
 
     // -------------------- Public: camp lookup + identify ----------------------
 
@@ -111,7 +112,52 @@ public class PreOrderService {
                     "Bestellungen sind zurzeit geschlossen. Bitte innerhalb der Öffnungszeiten wieder versuchen.");
         }
 
-        Product product = productRepository.findById(request.productId())
+        // actor is null: the participant placed this themselves, not a staff User
+        return createOrder(null, camp, currentParticipant, request.productId(), request.quantity(),
+                request.requestedFor(), request.note(), "Selbstbedienung");
+    }
+
+    /**
+     * Staff walk-through order entry: a seller loops through the bus and takes orders
+     * on the participants' behalf. Same flow as self-serve place() but the seller picks
+     * the participant instead of a JWT identifying them. Order windows are IGNORED here
+     * — a lead sitting on a bus doing the rounds is already staff overriding the schedule.
+     */
+    public PreOrderResponse staffPlace(User currentUser, Long campId, StaffPlaceRequest request) {
+        // Resolve the authoritative camp FIRST, then check the participant against it -
+        // same order as SaleService.doCheckout. Deriving the camp from the participant
+        // instead would let a super admin (whom checkSameCamp waves through) write into
+        // whichever camp the participant happens to belong to, ignoring the camp they
+        // actually have selected.
+        Camp camp = campAccess.resolveCamp(currentUser, campId);
+        campAccess.checkCampActive(camp);
+
+        Participant participant = participantRepository.findById(request.participantId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Teilnehmer nicht gefunden"));
+        if (!participant.getCamp().getId().equals(camp.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Teilnehmer nicht gefunden");
+        }
+
+        return createOrder(currentUser, camp, participant, request.productId(), request.quantity(),
+                request.requestedFor(), request.note(), "Rundgang");
+    }
+
+    /**
+     * The shared tail of both order-entry paths: validate the product against the camp,
+     * snapshot it onto a new PreOrder, save, audit, and push over SSE.
+     *
+     * Everything camp/participant-resolution related happens in the callers, because that
+     * is exactly where the two paths legitimately differ (a participant is identified by
+     * their JWT and bound by the order window; staff pick the participant and are not).
+     *
+     * @param staffActor  the staff member for a walk-through order; null when a participant
+     *                    placed it themselves (AuditService renders that as "System")
+     * @param origin      short provenance tag for the audit line, e.g. "Rundgang"
+     */
+    private PreOrderResponse createOrder(User staffActor, Camp camp, Participant participant,
+                                         Long productId, int quantity,
+                                         LocalDateTime requestedFor, String note, String origin) {
+        Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produkt nicht gefunden"));
         if (!product.getCamp().getId().equals(camp.getId()) || !product.isActive()) {
             // Same 404 wording either way - never confirm a foreign-camp product exists.
@@ -120,36 +166,39 @@ public class PreOrderService {
 
         PreOrder o = new PreOrder();
         o.setCamp(camp);
-        o.setParticipant(currentParticipant);
+        o.setParticipant(participant);
         o.setProduct(product);
         o.setProductName(product.getName());   // snapshot: survives future renames/reprices
         o.setUnitPrice(product.getPrice());
-        o.setQuantity(request.quantity());
-        o.setRequestedFor(request.requestedFor());
-        o.setNote(request.note());
+        o.setQuantity(quantity);
+        o.setRequestedFor(requestedFor);
+        o.setNote(note);
         PreOrder saved = preOrderRepository.save(o);
 
-        auditService.record(null /* system actor: the participant, not a staff User */,
-                camp, EntityType.PRE_ORDER, saved.getId(),
-                currentParticipant.getFirstName() + " " + currentParticipant.getLastName()
-                        + " → " + product.getName(),
-                Action.CREATED,
-                "Menge: " + saved.getQuantity()
+        // The actor's name already lives in its own audit column, so the line only carries
+        // the provenance tag - no need to repeat who did it.
+        auditService.record(staffActor, camp, EntityType.PRE_ORDER, saved.getId(),
+                orderLabel(saved), Action.CREATED,
+                "Menge: " + saved.getQuantity() + " (" + origin + ")"
                         + (saved.getRequestedFor() != null ? "; für " + saved.getRequestedFor() : "")
                         + (saved.getNote() != null ? "; Notiz: " + saved.getNote() : ""));
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
-    /** Participants can cancel THEIR OWN order while it's still NEW - safety net if they change their mind. */
+    /**
+     * Participants can cancel THEIR OWN order while the kitchen hasn't marked it ready.
+     * Once it's READY somebody's already made the toast - a self-cancel from a phone at
+     * that point would waste food, so cancellation from there is up to staff.
+     */
     public PreOrderResponse cancelMine(Participant currentParticipant, Long orderId) {
         PreOrder o = preOrderRepository.findById(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Nicht gefunden"));
         if (!o.getParticipant().getId().equals(currentParticipant.getId())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Nicht gefunden");
         }
-        if (o.getStatus() != PreOrder.Status.NEW) {
+        if (o.getStatus() != PreOrder.Status.NEW && o.getStatus() != PreOrder.Status.IN_PROGRESS) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Nur offene Bestellungen können storniert werden");
+                    "Nur offene oder in Vorbereitung befindliche Bestellungen können storniert werden");
         }
         return doCancel(null, o);
     }
@@ -162,14 +211,44 @@ public class PreOrderService {
                 .map(PreOrderResponse::from).toList();
     }
 
-    /** Staff cancel - e.g. product ran out. */
+    /** Staff cancel - e.g. product ran out. Allowed while not yet picked up. */
     public PreOrderResponse staffCancel(User currentUser, Long orderId) {
         PreOrder o = loadCheckedStaff(currentUser, orderId);
-        if (o.getStatus() != PreOrder.Status.NEW) {
+        if (o.getStatus() == PreOrder.Status.PICKED_UP || o.getStatus() == PreOrder.Status.CANCELLED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Nur offene Bestellungen können storniert werden");
+                    "Diese Bestellung ist bereits abgeholt oder storniert");
         }
         return doCancel(currentUser, o);
+    }
+
+    /** Kitchen starts preparing: NEW → IN_PROGRESS. */
+    public PreOrderResponse start(User currentUser, Long orderId) {
+        PreOrder o = loadCheckedStaff(currentUser, orderId);
+        requireStatus(o, PreOrder.Status.NEW, "Nur neue Bestellungen können gestartet werden");
+        o.setStatus(PreOrder.Status.IN_PROGRESS);
+        o.setStartedAt(LocalDateTime.now());
+        o.setStartedBy(currentUser);
+        PreOrder saved = preOrderRepository.save(o);
+        auditService.record(currentUser, o.getCamp(), EntityType.PRE_ORDER, saved.getId(),
+                orderLabel(saved), Action.STARTED, null);
+        return finalizeAndPublish(saved);
+    }
+
+    /** Kitchen finishes: IN_PROGRESS → READY (or NEW → READY as a fast-forward). */
+    public PreOrderResponse markReady(User currentUser, Long orderId) {
+        PreOrder o = loadCheckedStaff(currentUser, orderId);
+        if (o.getStatus() != PreOrder.Status.NEW && o.getStatus() != PreOrder.Status.IN_PROGRESS) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Diese Bestellung ist nicht mehr in Vorbereitung");
+        }
+        // fast-forward from NEW skips the started_at bookkeeping but records the transition
+        o.setStatus(PreOrder.Status.READY);
+        o.setReadyAt(LocalDateTime.now());
+        o.setReadyBy(currentUser);
+        PreOrder saved = preOrderRepository.save(o);
+        auditService.record(currentUser, o.getCamp(), EntityType.PRE_ORDER, saved.getId(),
+                orderLabel(saved), Action.READY, null);
+        return finalizeAndPublish(saved);
     }
 
     /**
@@ -191,7 +270,9 @@ public class PreOrderService {
 
     private PreOrderResponse doPickup(User currentUser, Long orderId, PickupRequest request) {
         PreOrder o = loadCheckedStaff(currentUser, orderId);
-        if (o.getStatus() != PreOrder.Status.NEW) {
+        // pickup is allowed from NEW / IN_PROGRESS / READY — a snickers goes NEW → PICKED_UP
+        // directly, a toast comes through the whole kitchen flow first
+        if (o.getStatus() == PreOrder.Status.PICKED_UP || o.getStatus() == PreOrder.Status.CANCELLED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Diese Bestellung ist bereits abgeholt oder storniert");
         }
@@ -223,7 +304,7 @@ public class PreOrderService {
                         + "; bezahlt: " + split.paidCash() + " € bar"
                         + ", " + split.paidFromBalance() + " € Guthaben"
                         + ", " + split.debtAmount() + " € Schulden");
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     // -------------------- Admin: QR + windows --------------------------------
@@ -270,7 +351,7 @@ public class PreOrderService {
                 o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName()
                         + " → " + o.getProductName(),
                 Action.CANCELLED, null);
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     private PreOrder loadCheckedStaff(User currentUser, Long id) {
@@ -278,6 +359,24 @@ public class PreOrderService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Nicht gefunden"));
         campAccess.checkSameCamp(currentUser, o.getCamp());
         return o;
+    }
+
+    private static void requireStatus(PreOrder o, PreOrder.Status expected, String messageIfNot) {
+        if (o.getStatus() != expected) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, messageIfNot);
+        }
+    }
+
+    private static String orderLabel(PreOrder o) {
+        return o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName()
+                + " → " + o.getProductName();
+    }
+
+    /** Serialise once + push to any connected participant devices, then return. */
+    private PreOrderResponse finalizeAndPublish(PreOrder saved) {
+        PreOrderResponse r = PreOrderResponse.from(saved);
+        notifier.publish(r);
+        return r;
     }
 
     // A window with both edges null (or where open == close) means "always open".

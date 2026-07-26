@@ -26,10 +26,15 @@ import java.time.LocalDateTime;
 })
 public class PreOrder {
 
-    // MVP state machine: NEW (waiting) → PICKED_UP (done + paid) / CANCELLED.
-    // The richer NEW → IN_PROGRESS → READY → PICKED_UP flow is planned for the next chunk;
-    // storing the field now keeps the schema stable when those states get added.
-    public enum Status { NEW, PICKED_UP, CANCELLED }
+    // Lifecycle:
+    //   NEW          participant placed it, nothing done yet
+    //   IN_PROGRESS  a seller/kitchen picked it up and started preparing
+    //   READY        prepared, waiting for the participant to collect
+    //   PICKED_UP    handed out + paid (terminal, revenue counted here)
+    //   CANCELLED    dropped before pickup (terminal, no money moves)
+    // Fast-forward paths are allowed for items that need no prep — e.g. a Snickers goes
+    // NEW → PICKED_UP directly. See PreOrderService.transition() for the guardrails.
+    public enum Status { NEW, IN_PROGRESS, READY, PICKED_UP, CANCELLED }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -90,11 +95,23 @@ public class PreOrder {
 
     @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "started_by")
+    private User startedBy;
+
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ready_by")
+    private User readyBy;
+
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "picked_up_by")
     private User pickedUpBy;
 
     @Column(updatable = false)
     private LocalDateTime createdAt;
+    private LocalDateTime startedAt;
+    private LocalDateTime readyAt;
     private LocalDateTime pickedUpAt;
     private LocalDateTime cancelledAt;
 

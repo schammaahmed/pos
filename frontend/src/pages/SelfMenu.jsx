@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, ClipboardList, Package, Plus } from 'lucide-react'
 import { selfApi, loadSelf } from '../selfApi'
 import { fmt } from '../money'
+import { groupByCategory } from '../products'
 import { SelfShell } from './Self'
 
 // The menu the participant sees after identifying. Grouped by category, one card per
@@ -154,14 +155,4 @@ function PlaceDialog({ product, onClose, onDone }) {
 
 function ErrorCard({ message }) {
   return <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{message}</div>
-}
-
-function groupByCategory(products) {
-  const map = new Map()
-  for (const p of products) {
-    const key = p.category ?? ''
-    if (!map.has(key)) map.set(key, [])
-    map.get(key).push(p)
-  }
-  return [...map.entries()]
 }
