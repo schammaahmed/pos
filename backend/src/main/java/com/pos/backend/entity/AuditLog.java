@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 })
 public class AuditLog {
 
-    public enum EntityType { PRODUCT, PARTICIPANT, SALE, USER, CAMP, SPECIAL, SPECIAL_ORDER }
+    public enum EntityType { PRODUCT, PARTICIPANT, SALE, USER, CAMP, SPECIAL, SPECIAL_ORDER, PRE_ORDER }
 
     public enum Action {
         CREATED, UPDATED, DELETED,
@@ -28,7 +28,8 @@ public class AuditLog {
         DEPOSIT, DEBT_SETTLED,
         SOLD, FLAGGED, REVERSED, REVIEWED,
         IMPORTED,
-        RESERVED, COLLECTED, CANCELLED, CLOSED
+        RESERVED, COLLECTED, CANCELLED, CLOSED,
+        PICKED_UP
     }
 
     @Id

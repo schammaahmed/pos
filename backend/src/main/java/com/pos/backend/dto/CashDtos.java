@@ -29,9 +29,10 @@ public class CashDtos {
             BigDecimal startingCash,   // Startgeld / float
             BigDecimal cashSales,      // Bar eingenommen aus Verkäufen
             BigDecimal specialsCash,   // Bar eingenommen aus Vorbestell-Ausgaben (Aktionen)
+            BigDecimal preordersCash,  // Bar eingenommen aus Selbstbedienungs-Vorbestellungen
             BigDecimal deposits,       // Nachlagen
             BigDecimal withdrawals,    // Entnahmen
-            BigDecimal expected,       // Soll = start + sales + specials + deposits - withdrawals
+            BigDecimal expected,       // Soll = start + sales + specials + preorders + deposits - withdrawals
             java.util.List<CashMovementResponse> movements
     ) {}
 

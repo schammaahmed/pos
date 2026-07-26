@@ -36,8 +36,11 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll() // login must be reachable without a token
+                        .requestMatchers("/api/public/**").permitAll() // self-serve landing + identify (no token yet)
                         .requestMatchers("/error").permitAll()       // Spring forwards exceptions here internally - blocking it turns every error into an empty 403
-                        .anyRequest().authenticated()                // everything else needs a valid JWT
+                        // /api/self/** is participant-JWT'd - the auth filter sets ROLE_PARTICIPANT
+                        .requestMatchers("/api/self/**").hasRole("PARTICIPANT")
+                        .anyRequest().authenticated()                // everything else needs a valid staff JWT
                 )
                 // without this, a missing/invalid token answers 403 Forbidden ("you may not") -
                 // correct is 401 Unauthorized ("you are not logged in"), which tells the frontend to show the login page

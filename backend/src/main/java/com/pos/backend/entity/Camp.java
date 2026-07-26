@@ -6,6 +6,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 // One camp = one season in one city (e.g. "Sommerlager Wien 2026").
 // A new season is a FRESH camp - participants, products and sales all hang off a camp,
@@ -40,6 +41,17 @@ public class Camp {
     @Column(nullable = false, precision = 10, scale = 2,
             columnDefinition = "numeric(10,2) not null default 0")
     private BigDecimal startingCash = BigDecimal.ZERO;
+
+    // The random opaque token embedded in the stand's QR code. Nullable until a lead
+    // opens self-serve for this camp; rotatable if the QR is ever compromised.
+    @Column(unique = true)
+    private String selfServeToken;
+
+    // A single "orders open" window applied to every day. Both null = always open
+    // whenever the camp is ACTIVE. Kept as LocalTimes to stay timezone-neutral;
+    // "18:00" means 18:00 in the camp's local wall clock.
+    private LocalTime selfServeOpenFrom;
+    private LocalTime selfServeOpenUntil;
 
     @Column(updatable = false)
     private LocalDateTime createdAt;
