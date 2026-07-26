@@ -1,18 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Clock, Flame, PackageOpen, X } from 'lucide-react'
 import { selfApi, loadSelf } from '../selfApi'
 import { fmt } from '../money'
 import { SelfShell } from './Self'
 
-// The participant's own orders. Polls every 5 s so the status flips to "Abgeholt"
-// on this device shortly after a seller marks the pickup. Chunk 2 will replace the
-// polling with a server-sent-event push, at which point this hook becomes a one-liner.
+// The participant's own orders. Live via Server-Sent Events: the server pushes a
+// "preorder" event whenever one of the participant's orders transitions, so status
+// flips (fertig, abgeholt, …) show up sub-second. EventSource auto-reconnects on
+// blip. Falls back to a slow poll if SSE isn't available (older browsers / proxies).
 export default function SelfOrders() {
   const navigate = useNavigate()
   const [orders, setOrders] = useState([])
   const [error, setError] = useState(null)
   const [cancelling, setCancelling] = useState(null)
+  // Remembers which order IDs were already READY so the browser Notification only
+  // fires on the actual NEW→READY / IN_PROGRESS→READY transition, not on every refresh.
+  const readySeen = useRef(new Set())
 
   async function reload() {
     try { setOrders(await selfApi('/api/self/preorders')) }
@@ -20,10 +24,31 @@ export default function SelfOrders() {
   }
 
   useEffect(() => {
-    if (!loadSelf()?.token) { navigate('/self', { replace: true }); return }
-    reload()
-    const t = setInterval(reload, 5000)
-    return () => clearInterval(t)
+    const self = loadSelf()
+    if (!self?.token) { navigate('/self', { replace: true }); return }
+    // seed the state so a page refresh doesn't re-fire notifications for orders
+    // that were already ready when we loaded
+    reload().then(() => {})
+
+    // EventSource can't send Authorization headers, so the JWT rides in as a query
+    // param that JwtAuthFilter accepts as a fallback for this endpoint.
+    const es = new EventSource(`/api/self/preorders/stream?access_token=${encodeURIComponent(self.token)}`)
+    es.addEventListener('preorder', (evt) => {
+      let pushed
+      try { pushed = JSON.parse(evt.data) } catch { return }
+      if (pushed.status === 'READY' && !readySeen.current.has(pushed.id)) {
+        readySeen.current.add(pushed.id)
+        notifyReady(pushed)
+      }
+      reload()
+    })
+    es.onerror = () => { /* browser retries automatically; ignore */ }
+
+    // Belt-and-braces fallback poll in case SSE gets held up by a proxy - runs every
+    // 30 s (much less than the old 5 s) so it stays cheap when SSE is working.
+    const poll = setInterval(reload, 30000)
+
+    return () => { es.close(); clearInterval(poll) }
   }, [navigate])
 
   async function doCancel(id) {
@@ -148,4 +173,20 @@ function ConfirmSheet({ message, onConfirm, onClose }) {
 
 function fmtTs(ts) {
   return new Date(ts).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+// Fire a browser notification when an order becomes READY. If permission hasn't been
+// granted yet, request it - the READY event itself is a user-relevant moment so the
+// browser is fine with prompting here (and it's a no-op if the browser doesn't
+// support the API or the user denied). Falls back to nothing visible; the on-page
+// green highlight already tells the kid it's ready when the tab is open.
+function notifyReady(order) {
+  if (typeof Notification === 'undefined') return
+  const title = 'Bestellung fertig!'
+  const body = `${order.quantity}× ${order.productName} kann abgeholt werden.`
+  const show = () => { try { new Notification(title, { body, tag: `preorder-${order.id}` }) } catch { /* ignore */ } }
+  if (Notification.permission === 'granted') { show(); return }
+  if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then((p) => { if (p === 'granted') show() })
+  }
 }

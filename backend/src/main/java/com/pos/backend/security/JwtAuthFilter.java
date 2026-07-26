@@ -41,10 +41,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        String header = request.getHeader("Authorization");
+        String token = readToken(request);
 
-        if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
+        if (token != null) {
             Claims claims = jwtService.parse(token);
 
             if (claims != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -59,6 +58,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    // Preferred: "Authorization: Bearer <jwt>". Fallback: "?access_token=<jwt>" - browsers
+    // can't set Authorization on an EventSource, and this is the standard workaround for SSE
+    // (also used by OAuth2 bearer tokens). Query-string tokens are visible in server logs and
+    // referrer headers, so we only accept them here as a fallback for the same short-lived JWT.
+    private static String readToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) return header.substring(7);
+        String qp = request.getParameter("access_token");
+        return (qp != null && !qp.isBlank()) ? qp : null;
     }
 
     private void authenticateStaff(Claims claims) {

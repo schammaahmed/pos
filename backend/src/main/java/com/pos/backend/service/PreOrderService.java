@@ -42,6 +42,7 @@ public class PreOrderService {
     private final AuditService auditService;
     private final JwtService jwtService;
     private final TransactionTemplate transactionTemplate;
+    private final PreOrderNotifier notifier;
 
     // -------------------- Public: camp lookup + identify ----------------------
 
@@ -137,7 +138,7 @@ public class PreOrderService {
                 "Menge: " + saved.getQuantity()
                         + (saved.getRequestedFor() != null ? "; für " + saved.getRequestedFor() : "")
                         + (saved.getNote() != null ? "; Notiz: " + saved.getNote() : ""));
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     /**
@@ -186,7 +187,7 @@ public class PreOrderService {
         PreOrder saved = preOrderRepository.save(o);
         auditService.record(currentUser, o.getCamp(), EntityType.PRE_ORDER, saved.getId(),
                 orderLabel(saved), Action.STARTED, null);
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     /** Kitchen finishes: IN_PROGRESS → READY (or NEW → READY as a fast-forward). */
@@ -203,7 +204,7 @@ public class PreOrderService {
         PreOrder saved = preOrderRepository.save(o);
         auditService.record(currentUser, o.getCamp(), EntityType.PRE_ORDER, saved.getId(),
                 orderLabel(saved), Action.READY, null);
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     /**
@@ -259,7 +260,7 @@ public class PreOrderService {
                         + "; bezahlt: " + split.paidCash() + " € bar"
                         + ", " + split.paidFromBalance() + " € Guthaben"
                         + ", " + split.debtAmount() + " € Schulden");
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     // -------------------- Admin: QR + windows --------------------------------
@@ -306,7 +307,7 @@ public class PreOrderService {
                 o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName()
                         + " → " + o.getProductName(),
                 Action.CANCELLED, null);
-        return PreOrderResponse.from(saved);
+        return finalizeAndPublish(saved);
     }
 
     private PreOrder loadCheckedStaff(User currentUser, Long id) {
@@ -325,6 +326,13 @@ public class PreOrderService {
     private static String orderLabel(PreOrder o) {
         return o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName()
                 + " → " + o.getProductName();
+    }
+
+    /** Serialise once + push to any connected participant devices, then return. */
+    private PreOrderResponse finalizeAndPublish(PreOrder saved) {
+        PreOrderResponse r = PreOrderResponse.from(saved);
+        notifier.publish(r);
+        return r;
     }
 
     // A window with both edges null (or where open == close) means "always open".
