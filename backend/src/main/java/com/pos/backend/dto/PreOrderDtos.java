@@ -72,6 +72,17 @@ public class PreOrderDtos {
             @Size(max = 300) String note  // optional: "ohne Zwiebel"
     ) {}
 
+    // Staff-issued variant: a seller walks the bus, takes orders on the participants'
+    // behalf. Same shape as PlaceOrderRequest but with an explicit participantId (the
+    // seller taps them, they don't identify themselves).
+    public record StaffPlaceRequest(
+            @NotNull Long participantId,
+            @NotNull Long productId,
+            @Min(1) int quantity,
+            LocalDateTime requestedFor,
+            @Size(max = 300) String note
+    ) {}
+
     // -------------------- Shared (participant + staff) ---------------------
 
     /** One pre-order row - used by both the participant's "meine Bestellungen" and the staff queue. */

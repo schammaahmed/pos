@@ -12,6 +12,7 @@ import Admin from './pages/Admin'
 import Aktionen from './pages/Aktionen'
 import Overview from './pages/Overview'
 import PreOrders from './pages/PreOrders'
+import PreOrderWalk from './pages/PreOrderWalk'
 import Self from './pages/Self'
 import SelfMenu from './pages/SelfMenu'
 import SelfOrders from './pages/SelfOrders'
@@ -46,6 +47,7 @@ export default function App() {
               <Route path="/sales" element={<SalesLog />} />
               <Route path="/aktionen" element={<Aktionen />} />
               <Route path="/preorders" element={<PreOrders />} />
+              <Route path="/preorders/walk" element={<PreOrderWalk />} />
               <Route path="/admin" element={<Admin />} />
             </Route>
             <Route path="/" element={<Home />} />

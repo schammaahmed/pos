@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
-  CheckCircle2, ChevronRight, Clock, Flame, PackageOpen, PlayCircle, X,
+  CheckCircle2, ChevronRight, Clock, Flame, Footprints, PackageOpen, PlayCircle, X,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { fmt } from '../money'
 import { EmptyState, SectionHeader } from '../components/ui'
@@ -52,8 +53,15 @@ export default function PreOrders() {
   return (
     <div className="space-y-6">
       <SectionHeader title="Vorbestellungen" hint="Selbstbedienung vom QR-Code">
-        <div className="text-xs text-gray-500">
-          {neu.length} neu · {kitchen.length} in Küche · {ready.length} fertig
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-gray-500">
+            {neu.length} neu · {kitchen.length} in Küche · {ready.length} fertig
+          </div>
+          {/* opens the fast-input walk mode - a seller loops through the bus taking orders */}
+          <Link to="/preorders/walk"
+                className="inline-flex items-center gap-1.5 bg-primary text-white rounded-lg px-3 py-1.5 text-sm font-semibold">
+            <Footprints className="w-4 h-4" /> Rundgang
+          </Link>
         </div>
       </SectionHeader>
 
