@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, CheckCircle2, Search, Undo2, UserRound, X } from 'lucide-react'
+import { ArrowLeft, Check, CheckCircle2, Undo2, UserRound, X } from 'lucide-react'
 import { api } from '../api'
 import { fmt } from '../money'
 import { SectionHeader } from '../components/ui'
@@ -34,8 +34,14 @@ export default function PreOrderWalk() {
 
   function reset() { setParticipant(null); setProduct(null); setQuantity(1) }
 
+  // A ref, not the `busy` state: setBusy is async, so `disabled={busy}` only takes effect
+  // on the next render. Two quick taps - likely on a phone, walking down a bus aisle -
+  // would otherwise both get past the guard and post the order twice.
+  const inFlight = useRef(false)
+
   async function confirm() {
-    if (!participant || !product) return
+    if (!participant || !product || inFlight.current) return
+    inFlight.current = true
     setBusy(true); setError(null)
     try {
       const created = await api('/api/preorders', {
@@ -45,8 +51,12 @@ export default function PreOrderWalk() {
       setTaken((prev) => [{ id: created.id, participantName: participant.firstName + ' ' + participant.lastName,
                             productName: product.name, quantity }, ...prev])
       reset()
-    } catch (e) { setError(e.message); setBusy(false); return }
-    setBusy(false)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      inFlight.current = false
+      setBusy(false)
+    }
   }
 
   // Undo the last order this session — cancels the underlying PreOrder if it's still NEW.
@@ -54,11 +64,16 @@ export default function PreOrderWalk() {
   // rather than silently pretending it worked.
   async function undoLast() {
     const last = taken[0]
-    if (!last) return
+    if (!last || inFlight.current) return
+    inFlight.current = true
     try {
       await api(`/api/preorders/${last.id}/cancel`, { method: 'POST' })
       setTaken((prev) => prev.slice(1))
-    } catch (e) { setError(e.message) }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      inFlight.current = false
+    }
   }
 
   // group by category the same way the till does, so a seller who knows both flows
@@ -80,25 +95,34 @@ export default function PreOrderWalk() {
 
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">{error}</div>}
 
-      {/* Step 1 — participant */}
-      <button
-        onClick={() => setShowPicker(true)}
-        className={`w-full flex items-center gap-3 rounded-xl p-4 text-left transition ${
-          participant ? 'bg-primary text-white' : 'bg-white border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50'
-        }`}
-      >
-        <UserRound className={`w-6 h-6 ${participant ? 'opacity-90' : 'text-gray-400'}`} />
-        <span className="flex-1 font-semibold truncate">
-          {participant ? `${participant.firstName} ${participant.lastName}` : 'Teilnehmer wählen'}
-        </span>
-        {participant && (
-          <span onClick={(e) => { e.stopPropagation(); setParticipant(null); setProduct(null) }}
-                className="opacity-80 hover:opacity-100"
-                title="Anderen Teilnehmer wählen">
-            <X className="w-5 h-5" />
+      {/* Step 1 — participant. The picker and the clear-X are SIBLINGS, not nested:
+          a button inside a button is invalid HTML, and a click-handling <span> is
+          unreachable by keyboard (not focusable, not announced as a control). */}
+      <div className={`w-full flex items-center gap-3 rounded-xl transition ${
+        participant ? 'bg-primary text-white' : 'bg-white border border-dashed border-gray-300 text-gray-500'
+      }`}>
+        <button
+          type="button"
+          onClick={() => setShowPicker(true)}
+          className={`flex-1 min-w-0 flex items-center gap-3 p-4 text-left rounded-xl ${
+            participant ? '' : 'hover:bg-gray-50'
+          }`}
+        >
+          <UserRound className={`w-6 h-6 shrink-0 ${participant ? 'opacity-90' : 'text-gray-400'}`} />
+          <span className="flex-1 font-semibold truncate">
+            {participant ? `${participant.firstName} ${participant.lastName}` : 'Teilnehmer wählen'}
           </span>
+        </button>
+        {participant && (
+          <button type="button"
+                  onClick={() => { setParticipant(null); setProduct(null) }}
+                  className="shrink-0 p-4 opacity-80 hover:opacity-100 rounded-xl"
+                  aria-label="Teilnehmer abwählen"
+                  title="Anderen Teilnehmer wählen">
+            <X className="w-5 h-5" />
+          </button>
         )}
-      </button>
+      </div>
 
       {/* Step 2 — product (only once a participant is picked) */}
       {participant && (
@@ -110,7 +134,7 @@ export default function PreOrderWalk() {
               {category && <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 px-1">{category}</div>}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {list.map((p) => (
-                  <button key={p.id} onClick={() => setProduct(p)}
+                  <button key={p.id} onClick={() => { setProduct(p); setQuantity(1) }}
                           className={`rounded-xl p-3 text-left border transition ${
                             product?.id === p.id
                               ? 'bg-primary text-white border-primary'
