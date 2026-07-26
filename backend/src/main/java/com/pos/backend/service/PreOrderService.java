@@ -147,12 +147,20 @@ public class PreOrderService {
      * the participant instead of a JWT identifying them. Order windows are IGNORED here
      * — a lead sitting on a bus doing the rounds is already staff overriding the schedule.
      */
-    public PreOrderResponse staffPlace(User currentUser, StaffPlaceRequest request) {
+    public PreOrderResponse staffPlace(User currentUser, Long campId, StaffPlaceRequest request) {
+        // Resolve the authoritative camp FIRST, then check the participant against it -
+        // same order as SaleService.doCheckout. Deriving the camp from the participant
+        // instead would let a super admin (whom checkSameCamp waves through) write into
+        // whichever camp the participant happens to belong to, ignoring the camp they
+        // actually have selected.
+        Camp camp = campAccess.resolveCamp(currentUser, campId);
+        campAccess.checkCampActive(camp);
+
         Participant participant = participantRepository.findById(request.participantId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Teilnehmer nicht gefunden"));
-        campAccess.checkSameCamp(currentUser, participant.getCamp());
-        Camp camp = participant.getCamp();
-        campAccess.checkCampActive(camp);
+        if (!participant.getCamp().getId().equals(camp.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Teilnehmer nicht gefunden");
+        }
 
         Product product = productRepository.findById(request.productId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produkt nicht gefunden"));
