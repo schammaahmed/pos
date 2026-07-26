@@ -65,12 +65,18 @@ export default function PreOrderWalk() {
   // rather than silently pretending it worked.
   async function undoLast() {
     const last = taken[0]
-    if (!last || inFlight.current) return
+    // `undoBlocked` stops the retry loop: without it a refused cancel left the row at
+    // position 0, so every further tap re-attempted the same failing request and the
+    // seller got the same error with no signal that this one simply can't be undone.
+    if (!last || last.undoBlocked || inFlight.current) return
     inFlight.current = true
     try {
       await api(`/api/preorders/${last.id}/cancel`, { method: 'POST' })
       setTaken((prev) => prev.slice(1))
     } catch (e) {
+      // The kitchen already started it - mark the row so it stops being a retry target
+      // and says so on the row itself, rather than only in the error banner.
+      setTaken((prev) => prev.map((t, i) => (i === 0 ? { ...t, undoBlocked: true, blockedReason: e.message } : t)))
       setError(e.message)
     } finally {
       inFlight.current = false
@@ -177,8 +183,11 @@ export default function PreOrderWalk() {
           <div className="flex items-center justify-between mb-1">
             <div className="text-xs font-semibold text-gray-500">In diesem Rundgang</div>
             <button onClick={undoLast}
-                    className="text-xs text-gray-400 hover:text-accent flex items-center gap-1"
-                    title="Letzte Bestellung stornieren">
+                    disabled={taken[0]?.undoBlocked}
+                    className="text-xs text-gray-400 hover:text-accent flex items-center gap-1 disabled:opacity-40 disabled:hover:text-gray-400"
+                    title={taken[0]?.undoBlocked
+                      ? 'Diese Bestellung ist schon in der Küche und kann hier nicht mehr storniert werden'
+                      : 'Letzte Bestellung stornieren'}>
               <Undo2 className="w-3.5 h-3.5" /> Letzte rückgängig
             </button>
           </div>
@@ -187,6 +196,10 @@ export default function PreOrderWalk() {
               <div key={t.id} className={`p-2.5 flex items-center gap-2 text-sm ${i === 0 ? '' : 'opacity-70'}`}>
                 <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
                 <span className="truncate">{t.quantity}× {t.productName} <span className="text-gray-400">·</span> {t.participantName}</span>
+                {/* say it on the row, not just in the banner - the banner scrolls away */}
+                {t.undoBlocked && (
+                  <span className="ml-auto shrink-0 text-[11px] text-gray-400 italic">schon in der Küche</span>
+                )}
               </div>
             ))}
           </div>
