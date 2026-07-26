@@ -28,8 +28,7 @@ public class JwtService {
         this.expirationMs = expirationMs;
     }
 
-    // Called after a successful login. The email goes into the "subject" (standard JWT field),
-    // the role goes in as a custom claim so the frontend can show the right screens.
+    // Called after a successful STAFF login. Subject = email, role = SUPER_ADMIN / CAMP_LEAD / SELLER.
     public String generateToken(String email, String role) {
         Date now = new Date();
         return Jwts.builder()
@@ -41,18 +40,40 @@ public class JwtService {
                 .compact();
     }
 
-    // Returns the email inside the token, or null if the token is invalid/expired.
-    // Every protected request goes through this (see JwtAuthFilter).
-    public String extractEmail(String token) {
+    // Called after a successful self-serve identify. Subject = "participant:<id>" so it can
+    // never collide with a staff email, plus a camp claim for scoping. Same signing key -
+    // the filter distinguishes them by the "role" claim.
+    public String generateParticipantToken(long participantId, long campId, long ttlMs) {
+        Date now = new Date();
+        return Jwts.builder()
+                .subject("participant:" + participantId)
+                .claim("role", "PARTICIPANT")
+                .claim("camp", campId)
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + ttlMs))
+                .signWith(key)
+                .compact();
+    }
+
+    /** Parsed claims, or null if the token is invalid/expired. */
+    public Claims parse(String token) {
         try {
-            Claims claims = Jwts.parser()
-                    .verifyWith(key)   // checks the signature
+            return Jwts.parser()
+                    .verifyWith(key)
                     .build()
-                    .parseSignedClaims(token) // also checks expiration automatically
+                    .parseSignedClaims(token)
                     .getPayload();
-            return claims.getSubject();
         } catch (JwtException | IllegalArgumentException e) {
-            return null; // tampered, expired or malformed token -> treat as not logged in
+            return null;
         }
+    }
+
+    /** Convenience: staff email (== JWT subject) for STAFF tokens; null for anything else. */
+    public String extractEmail(String token) {
+        Claims c = parse(token);
+        if (c == null) return null;
+        String role = c.get("role", String.class);
+        if ("PARTICIPANT".equals(role)) return null; // not a staff token
+        return c.getSubject();
     }
 }
