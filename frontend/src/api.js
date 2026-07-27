@@ -14,7 +14,7 @@ export const ACTIVE_CAMP_KEY = 'pos_active_camp'
 // campId. A camp user is left untouched (passing a foreign campId would be a 403; their
 // own camp is already implied). /api/camps and /api/users are deliberately NOT here - a
 // super admin lists those across every camp.
-const CAMP_SCOPED = ['/api/participants', '/api/products', '/api/sales', '/api/cash', '/api/import', '/api/audit', '/api/specials', '/api/preorders']
+const CAMP_SCOPED = ['/api/participants', '/api/products', '/api/sales', '/api/cash', '/api/import', '/api/audit', '/api/specials', '/api/preorders', '/api/ledger']
 
 function withActiveCamp(path, user) {
   if (user?.role !== 'SUPER_ADMIN') return path

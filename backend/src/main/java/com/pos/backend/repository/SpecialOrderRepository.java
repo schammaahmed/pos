@@ -45,4 +45,20 @@ public interface SpecialOrderRepository extends JpaRepository<SpecialOrder, Long
               AND o.status = com.pos.backend.entity.SpecialOrder$Status.COLLECTED
             """)
     BigDecimal sumCollectedCashByCamp(@Param("campId") Long campId);
+
+    // Collected Aktionen for the unified sales-log ledger (actual money movements).
+    @Query("""
+            SELECT o FROM SpecialOrder o
+            WHERE o.special.camp.id = :campId
+              AND o.status = com.pos.backend.entity.SpecialOrder$Status.COLLECTED
+            """)
+    List<SpecialOrder> findCollectedByCamp(@Param("campId") Long campId);
+
+    // Total collected Aktionen revenue (price * qty), so the overview's Umsatz matches the ledger.
+    @Query("""
+            SELECT COALESCE(SUM(o.special.price * o.quantity), 0) FROM SpecialOrder o
+            WHERE o.special.camp.id = :campId
+              AND o.status = com.pos.backend.entity.SpecialOrder$Status.COLLECTED
+            """)
+    BigDecimal sumCollectedRevenueByCamp(@Param("campId") Long campId);
 }
