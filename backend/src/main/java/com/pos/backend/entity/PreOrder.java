@@ -108,6 +108,20 @@ public class PreOrder {
     @JoinColumn(name = "picked_up_by")
     private User pickedUpBy;
 
+    // who cancelled it (null = the participant self-cancelled from their phone)
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelled_by")
+    private User cancelledBy;
+
+    // cancellation review: set once leadership has acknowledged it. A lead's own cancel is
+    // self-reviewed; a seller's or participant's stays pending until ticked off. See ReviewService.
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by")
+    private User reviewedBy;
+    private LocalDateTime reviewedAt;
+
     @Column(updatable = false)
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;

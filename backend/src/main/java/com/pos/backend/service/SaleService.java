@@ -172,9 +172,11 @@ public class SaleService {
         sale.setStatus(Sale.Status.REVERSED);
         sale.setReversedBy(currentUser);
         sale.setReversedAt(LocalDateTime.now());
-        // the concern has been dealt with by the reversal itself, so it leaves the queue
+        // the concern has been dealt with by the reversal itself, so it leaves the queue.
+        // A reversal is only ever done by a lead (checked above), so it's self-reviewed.
         sale.setFlaggedForReview(false);
         sale.setReviewedBy(currentUser);
+        sale.setReviewedAt(LocalDateTime.now());
         Sale saved = saleRepository.save(sale);
 
         auditService.record(currentUser, sale.getCamp(), EntityType.SALE, sale.getId(),
@@ -216,6 +218,7 @@ public class SaleService {
         }
         sale.setFlaggedForReview(false);
         sale.setReviewedBy(currentUser);
+        sale.setReviewedAt(LocalDateTime.now());
         Sale reviewed = saleRepository.save(sale);
 
         auditService.record(currentUser, sale.getCamp(), EntityType.SALE, sale.getId(),
