@@ -21,6 +21,9 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     // flagged without being reversed, and those have no reversedAt at all (null sorts oddly).
     List<Sale> findByCampIdAndFlaggedForReviewTrueOrderByCreatedAtDesc(Long campId);
 
+    // Reversed sales for the cancellation-review queue.
+    List<Sale> findByCampIdAndStatusOrderByReversedAtDesc(Long campId, com.pos.backend.entity.Sale.Status status);
+
     // Cash physically taken in, for the cash-box maths. Only COMPLETED sales - a
     // reversed sale's cash was handed back, so it must not count.
     @Query("""

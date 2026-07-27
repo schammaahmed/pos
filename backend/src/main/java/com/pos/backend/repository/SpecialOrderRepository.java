@@ -61,4 +61,13 @@ public interface SpecialOrderRepository extends JpaRepository<SpecialOrder, Long
               AND o.status = com.pos.backend.entity.SpecialOrder$Status.COLLECTED
             """)
     BigDecimal sumCollectedRevenueByCamp(@Param("campId") Long campId);
+
+    // Cancelled Aktionen orders for the cancellation-review queue.
+    @Query("""
+            SELECT o FROM SpecialOrder o
+            WHERE o.special.camp.id = :campId
+              AND o.status = com.pos.backend.entity.SpecialOrder$Status.CANCELLED
+            ORDER BY o.cancelledAt DESC
+            """)
+    List<SpecialOrder> findCancelledByCamp(@Param("campId") Long campId);
 }
