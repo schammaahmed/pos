@@ -91,6 +91,7 @@ public class Sale {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by")
     private User reviewedBy;
+    private LocalDateTime reviewedAt;
 
     @Column(updatable = false)
     private LocalDateTime createdAt;

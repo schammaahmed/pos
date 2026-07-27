@@ -46,4 +46,13 @@ public interface PreOrderRepository extends JpaRepository<PreOrder, Long> {
               AND o.status = com.pos.backend.entity.PreOrder$Status.PICKED_UP
             """)
     BigDecimal sumPickedUpRevenueByCamp(@Param("campId") Long campId);
+
+    // Cancelled pre-orders for the cancellation-review queue.
+    @Query("""
+            SELECT o FROM PreOrder o
+            WHERE o.camp.id = :campId
+              AND o.status = com.pos.backend.entity.PreOrder$Status.CANCELLED
+            ORDER BY o.cancelledAt DESC
+            """)
+    List<PreOrder> findCancelledByCamp(@Param("campId") Long campId);
 }
