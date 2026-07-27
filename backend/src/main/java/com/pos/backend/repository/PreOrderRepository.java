@@ -38,4 +38,12 @@ public interface PreOrderRepository extends JpaRepository<PreOrder, Long> {
               AND o.status = com.pos.backend.entity.PreOrder$Status.PICKED_UP
             """)
     List<PreOrder> findPickedUpByCamp(@Param("campId") Long campId);
+
+    // Total picked-up pre-order revenue (unitPrice * qty), so the overview matches the ledger.
+    @Query("""
+            SELECT COALESCE(SUM(o.unitPrice * o.quantity), 0) FROM PreOrder o
+            WHERE o.camp.id = :campId
+              AND o.status = com.pos.backend.entity.PreOrder$Status.PICKED_UP
+            """)
+    BigDecimal sumPickedUpRevenueByCamp(@Param("campId") Long campId);
 }
