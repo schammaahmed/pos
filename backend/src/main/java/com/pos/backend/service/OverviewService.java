@@ -6,7 +6,9 @@ import com.pos.backend.entity.Camp;
 import com.pos.backend.entity.User;
 import com.pos.backend.repository.CampRepository;
 import com.pos.backend.repository.ParticipantRepository;
+import com.pos.backend.repository.PreOrderRepository;
 import com.pos.backend.repository.SaleRepository;
+import com.pos.backend.repository.SpecialOrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +24,8 @@ public class OverviewService {
 
     private final CampRepository campRepository;
     private final SaleRepository saleRepository;
+    private final SpecialOrderRepository specialOrderRepository;
+    private final PreOrderRepository preOrderRepository;
     private final ParticipantRepository participantRepository;
     private final CashService cashService;
 
@@ -39,14 +43,20 @@ public class OverviewService {
     }
 
     private CampSummary summarise(User currentUser, Camp camp) {
+        Long id = camp.getId();
+        // Revenue spans all three streams, matching the unified sales-log ledger - otherwise
+        // the overview and the Verkäufe panel would show two different Umsatz figures.
+        BigDecimal revenue = saleRepository.sumRevenueByCamp(id)
+                .add(specialOrderRepository.sumCollectedRevenueByCamp(id))
+                .add(preOrderRepository.sumPickedUpRevenueByCamp(id));
         return new CampSummary(
-                camp.getId(),
+                id,
                 camp.getName(),
                 camp.getCity(),
                 camp.getStatus().name(),
-                saleRepository.sumRevenueByCamp(camp.getId()),
-                participantRepository.countByCampId(camp.getId()),
-                participantRepository.sumOpenDebtByCamp(camp.getId()),
-                cashService.cashBook(currentUser, camp.getId()).expected());
+                revenue,
+                participantRepository.countByCampId(id),
+                participantRepository.sumOpenDebtByCamp(id),
+                cashService.cashBook(currentUser, id).expected());
     }
 }
