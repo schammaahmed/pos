@@ -125,6 +125,12 @@ public class SpecialService {
         }
         o.setStatus(SpecialOrder.Status.CANCELLED);
         o.setCancelledAt(LocalDateTime.now());
+        o.setCancelledBy(currentUser);
+        // a lead's own cancellation is self-reviewed; a seller's stays pending for a lead
+        if (currentUser.isLeadership()) {
+            o.setReviewedBy(currentUser);
+            o.setReviewedAt(LocalDateTime.now());
+        }
         SpecialOrder saved = orderRepository.save(o);
         auditService.record(currentUser, o.getSpecial().getCamp(), EntityType.SPECIAL_ORDER, saved.getId(),
                 o.getSpecial().getName() + " für "

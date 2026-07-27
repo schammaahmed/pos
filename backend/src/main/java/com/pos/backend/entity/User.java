@@ -62,4 +62,10 @@ public class User {
     protected void onCreate(){
         createdAt = LocalDateTime.now();
     }
+
+    /** Leadership = can oversee a camp (review, cash, team). Used for auto-acknowledging
+     *  a cancellation they performed themselves - they ARE the oversight. */
+    public boolean isLeadership() {
+        return role == Role.SUPER_ADMIN || role == Role.CAMP_LEAD;
+    }
 }

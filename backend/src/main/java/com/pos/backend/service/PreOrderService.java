@@ -343,9 +343,16 @@ public class PreOrderService {
 
     // -------------------- helpers --------------------------------------------
 
+    // staffActor == null means the participant self-cancelled from their phone. Either way
+    // the cancellation needs a lead's eyes, UNLESS a lead did it themselves.
     private PreOrderResponse doCancel(User staffActor, PreOrder o) {
         o.setStatus(PreOrder.Status.CANCELLED);
         o.setCancelledAt(LocalDateTime.now());
+        o.setCancelledBy(staffActor); // null for a participant self-cancel
+        if (staffActor != null && staffActor.isLeadership()) {
+            o.setReviewedBy(staffActor);
+            o.setReviewedAt(LocalDateTime.now());
+        }
         PreOrder saved = preOrderRepository.save(o);
         auditService.record(staffActor, o.getCamp(), EntityType.PRE_ORDER, saved.getId(),
                 o.getParticipant().getFirstName() + " " + o.getParticipant().getLastName()

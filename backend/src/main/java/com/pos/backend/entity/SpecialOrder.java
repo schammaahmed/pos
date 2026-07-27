@@ -74,6 +74,21 @@ public class SpecialOrder {
     @JoinColumn(name = "collected_by")
     private User collectedBy;
 
+    // who cancelled it (null = the participant self-cancelled)
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelled_by")
+    private User cancelledBy;
+
+    // a cancellation is "reviewed" once leadership has acknowledged it. Cancellations done
+    // BY a lead are self-reviewed (they are the oversight); a seller's or a participant's
+    // cancellation stays pending until a lead ticks it off. See ReviewService.
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by")
+    private User reviewedBy;
+    private LocalDateTime reviewedAt;
+
     @Column(updatable = false)
     private LocalDateTime createdAt;
     private LocalDateTime collectedAt;
