@@ -21,7 +21,8 @@ public class SaleDtos {
 
     public record CheckoutItem(
             @NotNull Long productId,
-            @Min(1) int quantity
+            @Min(1) int quantity,
+            List<Long> optionIds       // chosen add-ons (must belong to the product); null = none
     ) {}
 
     public record CheckoutRequest(
@@ -33,10 +34,11 @@ public class SaleDtos {
             boolean keepChangeAsCredit // "keep the rest" -> overpaid cash becomes balance
     ) {}
 
-    public record SaleItemResponse(String productName, int quantity, BigDecimal unitPrice, BigDecimal lineTotal) {
+    public record SaleItemResponse(String productName, String optionsLabel, int quantity,
+                                   BigDecimal unitPrice, BigDecimal lineTotal) {
         public static SaleItemResponse from(SaleItem item) {
-            return new SaleItemResponse(item.getProduct().getName(), item.getQuantity(), item.getUnitPrice(),
-                    item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
+            return new SaleItemResponse(item.getProduct().getName(), item.getOptionsLabel(), item.getQuantity(),
+                    item.getUnitPrice(), item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
         }
     }
 

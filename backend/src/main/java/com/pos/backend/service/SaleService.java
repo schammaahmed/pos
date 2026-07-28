@@ -88,14 +88,33 @@ public class SaleService {
                         "Product belongs to another camp: " + product.getName());
             }
 
+            // Fold any chosen add-ons into the per-unit price and snapshot their labels.
+            // An option id that isn't one of THIS product's options is rejected, so a
+            // hand-crafted request can't attach a foreign or free extra.
+            BigDecimal unitPrice = product.getPrice();
+            String optionsLabel = null;
+            List<Long> optionIds = itemRequest.optionIds();
+            if (optionIds != null && !optionIds.isEmpty()) {
+                var chosen = product.getOptions().stream()
+                        .filter(opt -> optionIds.contains(opt.getId())).toList();
+                if (chosen.size() != optionIds.stream().distinct().count()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Unbekannte Option bei " + product.getName());
+                }
+                for (var opt : chosen) unitPrice = unitPrice.add(opt.getSurcharge());
+                optionsLabel = chosen.stream().map(o -> "+ " + o.getName())
+                        .reduce((a, b) -> a + ", " + b).orElse(null);
+            }
+
             SaleItem item = new SaleItem();
             item.setSale(sale);
             item.setProduct(product);
             item.setQuantity(itemRequest.quantity());
-            item.setUnitPrice(product.getPrice()); // price snapshot
+            item.setUnitPrice(unitPrice); // price snapshot incl. option surcharges
+            item.setOptionsLabel(optionsLabel);
             sale.getItems().add(item);
 
-            total = total.add(product.getPrice().multiply(BigDecimal.valueOf(itemRequest.quantity())));
+            total = total.add(unitPrice.multiply(BigDecimal.valueOf(itemRequest.quantity())));
         }
 
         BigDecimal balance = participant != null ? participant.getBalance() : BigDecimal.ZERO;
@@ -128,7 +147,8 @@ public class SaleService {
                         : "Barverkauf",
                 Action.SOLD,
                 sale.getItems().stream()
-                        .map(i -> i.getQuantity() + "x " + i.getProduct().getName())
+                        .map(i -> i.getQuantity() + "x " + i.getProduct().getName()
+                                + (i.getOptionsLabel() != null ? " (" + i.getOptionsLabel() + ")" : ""))
                         .reduce((a, b) -> a + ", " + b).orElse("") + " = " + total + " €");
 
         return SaleResponse.from(sale,
