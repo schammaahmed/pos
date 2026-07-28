@@ -6,6 +6,8 @@ import lombok.ToString;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 // Something the Verkaufsstand sells. Belongs to ONE camp - camp 2 buying leftovers
 // from camp 1 will be a StockTransfer (later milestone), not shared products.
@@ -40,6 +42,13 @@ public class Product {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "camp_id")
     private Camp camp;
+
+    // Optional add-ons (Ketchup, Mayo …). Cascade + orphanRemoval so editing a product's
+    // option list in one PUT adds/updates/removes them in step.
+    @ToString.Exclude
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC, id ASC")
+    private List<ProductOption> options = new ArrayList<>();
 
     @Column(updatable = false)
     private LocalDateTime createdAt;
