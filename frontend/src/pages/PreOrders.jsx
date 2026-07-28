@@ -187,6 +187,7 @@ function StatusColumn({ title, hint, tone, Icon, orders, renderActions, timestam
                     <div className="font-medium truncate">
                       {o.quantity}× {o.productName}
                     </div>
+                    {o.optionsLabel && <div className="text-xs text-primary font-medium">{o.optionsLabel}</div>}
                     <div className="text-xs text-gray-600 truncate">{o.participantName}</div>
                     <div className="text-[11px] text-gray-400">
                       {timestampLabel?.(o) ?? `vorbestellt ${fmtTime(o.createdAt)}`}
