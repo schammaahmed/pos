@@ -30,7 +30,12 @@ public class SaleItem {
     private int quantity;
 
     // SNAPSHOT of the price at the moment of sale. If the admin changes the Bueno price
-    // tomorrow, yesterday's sales must still show what was actually paid.
+    // tomorrow, yesterday's sales must still show what was actually paid. Includes any
+    // chosen option surcharges (see optionsLabel).
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
+
+    // Snapshot of the chosen add-ons for this line, e.g. "+ Ketchup, + Mayo". Null when none.
+    @Column(length = 500)
+    private String optionsLabel;
 }

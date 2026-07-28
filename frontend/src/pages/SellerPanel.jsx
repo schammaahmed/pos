@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Minimize2, Minus, Package, Plus, Search, ShoppingCart, Trash2, UserRound, X } from 'lucide-react'
+import { ArrowLeft, Check, CheckCircle2, Minimize2, Minus, Package, Plus, Search, ShoppingCart, Trash2, UserRound, X } from 'lucide-react'
 import { api } from '../api'
 import { useCamp } from '../campContext'
 import { fmt, fromCents, toCents } from '../money'
@@ -9,12 +9,23 @@ import ParticipantPickerSheet, { rememberRecentParticipant } from '../components
 const DEFAULT_SHEET_VH = 60
 const DEFAULT_PANEL_PX = 400
 
+// A cart line's identity = the product plus its chosen options. Sorting the ids makes the
+// key order-independent, so picking Ketchup then Mayo lands on the same line as Mayo then
+// Ketchup. A line with no options keys on the bare product id, so the grid's inline
+// +/- stepper (which passes String(productId)) still targets it.
+function lineKey(productId, optionIds) {
+  return optionIds.length ? `${productId}#${[...optionIds].sort((a, b) => a - b).join(',')}` : `${productId}`
+}
+
 // The heart of the POS. Flow: pick participant (or anonymous) -> tap products into
 // the cart -> "Zur Kasse" -> review basket + choose how it's paid -> confirm.
 export default function SellerPanel() {
   const [products, setProducts] = useState([])
   const [participant, setParticipant] = useState(null) // null = anonymous cash sale
-  const [cart, setCart] = useState({}) // productId -> quantity
+  // A cart LINE is a product + a specific set of options, so "Toast + Ketchup" and a plain
+  // "Toast" are different lines. Keyed by lineKey() -> { productId, optionIds, qty }.
+  const [cart, setCart] = useState({})
+  const [optioning, setOptioning] = useState(null) // product whose extras are being chosen
   const [basketOpen, setBasketOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false) // the full-screen participant picker
   const [lastSale, setLastSale] = useState(null) // success screen data
@@ -78,12 +89,25 @@ export default function SellerPanel() {
   const cartEntries = useMemo(
     () =>
       Object.entries(cart)
-        .map(([id, qty]) => ({ product: products.find((p) => p.id === Number(id)), qty }))
-        .filter((e) => e.product),
+        .map(([key, line]) => {
+          const product = products.find((p) => p.id === line.productId)
+          if (!product) return null
+          const chosen = (product.options ?? []).filter((o) => line.optionIds.includes(o.id))
+          const unitCents = toCents(product.price) + chosen.reduce((s, o) => s + toCents(o.surcharge), 0)
+          const optionsLabel = chosen.length ? chosen.map((o) => '+ ' + o.name).join(', ') : null
+          return { key, product, optionIds: line.optionIds, qty: line.qty, unitCents, optionsLabel }
+        })
+        .filter(Boolean),
     [cart, products],
   )
-  const totalCents = cartEntries.reduce((sum, e) => sum + toCents(e.product.price) * e.qty, 0)
+  const totalCents = cartEntries.reduce((sum, e) => sum + e.unitCents * e.qty, 0)
   const itemCount = cartEntries.reduce((sum, e) => sum + e.qty, 0)
+  // how many of each product sit in the cart across all its option-lines, for the grid badge
+  const qtyByProduct = useMemo(() => {
+    const m = {}
+    for (const e of cartEntries) m[e.product.id] = (m[e.product.id] || 0) + e.qty
+    return m
+  }, [cartEntries])
 
   // category tab + search box combined, so the seller can narrow a long product wall fast
   const visibleProducts = useMemo(() => {
@@ -93,15 +117,27 @@ export default function SellerPanel() {
     return list
   }, [products, categoryFilter, productSearch])
 
-  function addToCart(product) {
-    setCart((c) => ({ ...c, [product.id]: (c[product.id] || 0) + 1 }))
+  // A product with options opens the extras sheet first; a plain product goes straight in.
+  function onProductTap(product) {
+    if ((product.options ?? []).length > 0) setOptioning(product)
+    else addLine(product, [])
+  }
+
+  function addLine(product, optionIds) {
+    const key = lineKey(product.id, optionIds)
+    setCart((c) => ({
+      ...c,
+      [key]: { productId: product.id, optionIds, qty: (c[key]?.qty || 0) + 1 },
+    }))
     setBasketOpen(true) // show the running basket straight away, not only via the cart button
   }
 
-  function changeQty(productId, delta) {
+  function changeQty(key, delta) {
     setCart((c) => {
-      const next = { ...c, [productId]: (c[productId] || 0) + delta }
-      if (next[productId] <= 0) delete next[productId] // removing the last one deletes the line
+      const line = c[key]
+      if (!line) return c
+      const next = { ...c, [key]: { ...line, qty: line.qty + delta } }
+      if (next[key].qty <= 0) delete next[key] // removing the last one deletes the line
       return next
     })
   }
@@ -164,7 +200,13 @@ export default function SellerPanel() {
 
       <CategoryTabs products={products} active={categoryFilter} onChange={setCategoryFilter} />
 
-      <ProductGrid products={visibleProducts} cart={cart} onAdd={addToCart} onChangeQty={changeQty} />
+      <ProductGrid products={visibleProducts} qtyByProduct={qtyByProduct} onAdd={onProductTap} onChangeQty={changeQty} />
+
+      {optioning && (
+        <OptionSheet product={optioning}
+                     onConfirm={(ids) => { addLine(optioning, ids); setOptioning(null) }}
+                     onClose={() => setOptioning(null)} />
+      )}
 
       {/* opens the basket; hidden while the basket is already open */}
       {itemCount > 0 && !basketOpen && (
@@ -268,7 +310,7 @@ function CategoryTabs({ products, active, onChange }) {
 }
 
 // ---------------------------------------------------------------- product grid
-function ProductGrid({ products, cart, onAdd, onChangeQty }) {
+function ProductGrid({ products, qtyByProduct, onAdd, onChangeQty }) {
   if (products.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-400 text-sm">
@@ -281,7 +323,8 @@ function ProductGrid({ products, cart, onAdd, onChangeQty }) {
     // 2 columns on a phone (big tap targets), up to 4 on a laptop like the previous version
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
       {products.map((p) => {
-        const qty = cart[p.id] || 0
+        const qty = qtyByProduct[p.id] || 0
+        const hasOptions = (p.options ?? []).length > 0
         return (
           // a div, not a button: the quantity row below contains its own buttons and
           // nesting buttons inside a button is invalid HTML
@@ -311,20 +354,24 @@ function ProductGrid({ products, cart, onAdd, onChangeQty }) {
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-gray-500 mt-1">{fmt(p.price)}</div>
+                <div className="text-sm text-gray-500 mt-1">
+                  {fmt(p.price)}{hasOptions && <span className="text-gray-400"> · + Extras</span>}
+                </div>
               </div>
             </button>
 
-            {/* correct a mis-tap right here, without opening the basket first */}
-            {qty > 0 && (
+            {/* Inline +/- only for products WITHOUT options - with options the same product can
+                sit in several lines, so quantities are managed in the basket instead. The key
+                is String(p.id), which is exactly the lineKey of an option-less line. */}
+            {qty > 0 && !hasOptions && (
               <div className="flex items-center justify-between border-t border-gray-100 bg-primary/5 px-2 py-1.5">
-                <button onClick={() => onChangeQty(p.id, -1)}
+                <button onClick={() => onChangeQty(String(p.id), -1)}
                         title={qty === 1 ? 'Entfernen' : 'Weniger'}
                         className="w-9 h-9 rounded-lg bg-white border flex items-center justify-center hover:bg-gray-50">
                   {qty === 1 ? <Trash2 className="w-4 h-4 text-accent" /> : <Minus className="w-4 h-4" />}
                 </button>
                 <span className="font-semibold text-sm">{qty}</span>
-                <button onClick={() => onChangeQty(p.id, 1)} title="Mehr"
+                <button onClick={() => onChangeQty(String(p.id), 1)} title="Mehr"
                         className="w-9 h-9 rounded-lg bg-white border flex items-center justify-center hover:bg-gray-50">
                   <Plus className="w-4 h-4" />
                 </button>
@@ -333,6 +380,55 @@ function ProductGrid({ products, cart, onAdd, onChangeQty }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- option sheet
+// Shown when a seller taps a product that has extras (Käsetoast → Ketchup, Mayo). The
+// running total reflects the chosen surcharges; confirming adds one line to the cart.
+function OptionSheet({ product, onConfirm, onClose }) {
+  const [chosen, setChosen] = useState([])
+  const options = product.options ?? []
+  const toggle = (id) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))
+  const surcharge = options.filter((o) => chosen.includes(o.id)).reduce((s, o) => s + Number(o.surcharge), 0)
+  const total = Number(product.price) + surcharge
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl">
+        <div className="flex items-center justify-between px-5 pt-4">
+          <div>
+            <h2 className="font-bold text-lg">{product.name}</h2>
+            <div className="text-primary font-bold">{fmt(product.price)}</div>
+          </div>
+          <button onClick={onClose} className="text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <span className="block text-sm text-gray-600">Extras</span>
+          <div className="space-y-1.5">
+            {options.map((o) => {
+              const on = chosen.includes(o.id)
+              return (
+                <button key={o.id} type="button" onClick={() => toggle(o.id)}
+                        className={`w-full flex items-center gap-2 rounded-lg border px-3 py-3 text-left ${
+                          on ? 'border-primary bg-primary-soft' : 'border-gray-200'
+                        }`}>
+                  <span className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${
+                    on ? 'bg-primary border-primary text-white' : 'border-gray-300'
+                  }`}>{on && <Check className="w-3.5 h-3.5" />}</span>
+                  <span className="flex-1">{o.name}</span>
+                  {Number(o.surcharge) > 0 && <span className="text-sm text-gray-500">+{fmt(o.surcharge)}</span>}
+                </button>
+              )
+            })}
+          </div>
+          <button onClick={() => onConfirm(chosen)}
+                  className="w-full bg-primary text-white rounded-lg py-3 font-semibold flex items-center justify-center gap-1.5">
+            <Plus className="w-4 h-4" /> In den Warenkorb · {fmt(total)}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -414,7 +510,7 @@ function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPick
         body: {
           campId: activeCampId,
           participantId: participant?.id ?? null,
-          items: cartEntries.map((e) => ({ productId: e.product.id, quantity: e.qty })),
+          items: cartEntries.map((e) => ({ productId: e.product.id, quantity: e.qty, optionIds: e.optionIds })),
           cashGiven: fromCents(cashCents),
           useBalance,
           keepChangeAsCredit,
@@ -498,18 +594,19 @@ function BasketPanel({ cartEntries, totalCents, participant, onChangeQty, onPick
         {/* basket lines with +/- : the "final check with overview" from the requirements */}
         <div className="bg-gray-50 rounded-xl divide-y divide-gray-100">
           {cartEntries.map((e) => (
-            <div key={e.product.id} className="flex items-center gap-3 p-3">
-              <div className="flex-1">
-                <div className="font-medium">{e.product.name}</div>
-                <div className="text-sm text-gray-500">{fmt(e.product.price)}</div>
+            <div key={e.key} className="flex items-center gap-3 p-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate">{e.product.name}</div>
+                {e.optionsLabel && <div className="text-xs text-primary">{e.optionsLabel}</div>}
+                <div className="text-sm text-gray-500">{fmt(fromCents(e.unitCents))}</div>
               </div>
-              <button onClick={() => onChangeQty(e.product.id, -1)}
-                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
+              <button onClick={() => onChangeQty(e.key, -1)}
+                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center shrink-0">
                 <Minus className="w-4 h-4" />
               </button>
-              <span className="w-6 text-center font-semibold">{e.qty}</span>
-              <button onClick={() => onChangeQty(e.product.id, 1)}
-                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
+              <span className="w-6 text-center font-semibold shrink-0">{e.qty}</span>
+              <button onClick={() => onChangeQty(e.key, 1)}
+                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center shrink-0">
                 <Plus className="w-4 h-4" />
               </button>
             </div>

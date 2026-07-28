@@ -93,7 +93,8 @@ public class PreOrderService {
         return productRepository
                 .findByCampIdAndActiveTrueOrderByCategoryAscNameAsc(currentParticipant.getCamp().getId())
                 .stream()
-                .map(p -> new SelfProduct(p.getId(), p.getName(), p.getPrice(), p.getCategory()))
+                .map(p -> new SelfProduct(p.getId(), p.getName(), p.getPrice(), p.getCategory(),
+                        p.getOptions().stream().map(com.pos.backend.dto.ProductDtos.OptionResponse::from).toList()))
                 .toList();
     }
 
@@ -114,7 +115,7 @@ public class PreOrderService {
 
         // actor is null: the participant placed this themselves, not a staff User
         return createOrder(null, camp, currentParticipant, request.productId(), request.quantity(),
-                request.requestedFor(), request.note(), "Selbstbedienung");
+                request.requestedFor(), request.note(), request.optionIds(), "Selbstbedienung");
     }
 
     /**
@@ -139,7 +140,7 @@ public class PreOrderService {
         }
 
         return createOrder(currentUser, camp, participant, request.productId(), request.quantity(),
-                request.requestedFor(), request.note(), "Rundgang");
+                request.requestedFor(), request.note(), request.optionIds(), "Rundgang");
     }
 
     /**
@@ -156,7 +157,8 @@ public class PreOrderService {
      */
     private PreOrderResponse createOrder(User staffActor, Camp camp, Participant participant,
                                          Long productId, int quantity,
-                                         LocalDateTime requestedFor, String note, String origin) {
+                                         LocalDateTime requestedFor, String note,
+                                         List<Long> optionIds, String origin) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produkt nicht gefunden"));
         if (!product.getCamp().getId().equals(camp.getId()) || !product.isActive()) {
@@ -164,12 +166,30 @@ public class PreOrderService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Produkt nicht gefunden");
         }
 
+        // Resolve the chosen add-ons against THIS product's options - an id that isn't one of
+        // them is rejected, so a hand-crafted request can't attach a foreign/free extra. The
+        // surcharge is folded into the per-unit price and the labels are snapshotted.
+        BigDecimal unitPrice = product.getPrice();
+        String optionsLabel = null;
+        if (optionIds != null && !optionIds.isEmpty()) {
+            List<ProductOption> chosen = product.getOptions().stream()
+                    .filter(opt -> optionIds.contains(opt.getId()))
+                    .toList();
+            if (chosen.size() != optionIds.stream().distinct().count()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unbekannte Option gewählt");
+            }
+            for (ProductOption opt : chosen) unitPrice = unitPrice.add(opt.getSurcharge());
+            optionsLabel = chosen.stream().map(o -> "+ " + o.getName())
+                    .collect(java.util.stream.Collectors.joining(", "));
+        }
+
         PreOrder o = new PreOrder();
         o.setCamp(camp);
         o.setParticipant(participant);
         o.setProduct(product);
         o.setProductName(product.getName());   // snapshot: survives future renames/reprices
-        o.setUnitPrice(product.getPrice());
+        o.setOptionsLabel(optionsLabel);
+        o.setUnitPrice(unitPrice);             // base + chosen surcharges (snapshot)
         o.setQuantity(quantity);
         o.setRequestedFor(requestedFor);
         o.setNote(note);
@@ -180,6 +200,7 @@ public class PreOrderService {
         auditService.record(staffActor, camp, EntityType.PRE_ORDER, saved.getId(),
                 orderLabel(saved), Action.CREATED,
                 "Menge: " + saved.getQuantity() + " (" + origin + ")"
+                        + (optionsLabel != null ? "; " + optionsLabel : "")
                         + (saved.getRequestedFor() != null ? "; für " + saved.getRequestedFor() : "")
                         + (saved.getNote() != null ? "; Notiz: " + saved.getNote() : ""));
         return finalizeAndPublish(saved);

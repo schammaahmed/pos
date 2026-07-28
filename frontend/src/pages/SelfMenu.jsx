@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, ClipboardList, Package, Plus } from 'lucide-react'
+import { ArrowRight, Check, ClipboardList, Package, Plus } from 'lucide-react'
 import { selfApi, loadSelf } from '../selfApi'
 import { fmt } from '../money'
 import { groupByCategory } from '../products'
@@ -59,6 +59,9 @@ export default function SelfMenu() {
                       className="bg-white rounded-xl shadow-sm p-4 text-left hover:shadow-md active:scale-[0.98] transition">
                 <div className="font-medium truncate">{p.name}</div>
                 <div className="text-primary font-bold mt-1">{fmt(p.price)}</div>
+                {p.options?.length > 0 && (
+                  <div className="text-[11px] text-gray-400 mt-1">+ Extras möglich</div>
+                )}
                 <div className="text-xs text-gray-400 mt-2 flex items-center gap-1">
                   <Plus className="w-3.5 h-3.5" /> Vorbestellen
                 </div>
@@ -81,8 +84,14 @@ function PlaceDialog({ product, onClose, onDone }) {
   const [quantity, setQuantity] = useState(1)
   const [requestedFor, setRequestedFor] = useState('')
   const [note, setNote] = useState('')
+  const [chosen, setChosen] = useState([]) // selected option ids
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+
+  const options = product.options ?? []
+  function toggleOption(id) {
+    setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))
+  }
 
   async function submit() {
     setBusy(true); setError(null)
@@ -94,13 +103,17 @@ function PlaceDialog({ product, onClose, onDone }) {
           quantity: Number(quantity),
           requestedFor: requestedFor ? requestedFor + ':00' : null,
           note: note.trim() || null,
+          optionIds: chosen,
         },
       })
       onDone()
     } catch (e) { setError(e.message); setBusy(false) }
   }
 
-  const total = Number(product.price) * quantity
+  const surcharge = options
+    .filter((o) => chosen.includes(o.id))
+    .reduce((s, o) => s + Number(o.surcharge), 0)
+  const total = (Number(product.price) + surcharge) * quantity
 
   return (
     <div className="fixed inset-0 bg-black/50 z-40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
@@ -122,6 +135,29 @@ function PlaceDialog({ product, onClose, onDone }) {
               <button type="button" onClick={() => setQuantity((q) => q + 1)} className="border rounded-lg w-11 h-11 text-lg">+</button>
             </div>
           </label>
+
+          {options.length > 0 && (
+            <div>
+              <span className="block text-sm text-gray-600 mb-1">Extras</span>
+              <div className="space-y-1.5">
+                {options.map((o) => {
+                  const on = chosen.includes(o.id)
+                  return (
+                    <button key={o.id} type="button" onClick={() => toggleOption(o.id)}
+                            className={`w-full flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left ${
+                              on ? 'border-primary bg-primary-soft' : 'border-gray-200'
+                            }`}>
+                      <span className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${
+                        on ? 'bg-primary border-primary text-white' : 'border-gray-300'
+                      }`}>{on && <Check className="w-3.5 h-3.5" />}</span>
+                      <span className="flex-1">{o.name}</span>
+                      {Number(o.surcharge) > 0 && <span className="text-sm text-gray-500">+{fmt(o.surcharge)}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <label className="block">
             <span className="block text-sm text-gray-600 mb-1">Wann willst du es abholen? (optional)</span>

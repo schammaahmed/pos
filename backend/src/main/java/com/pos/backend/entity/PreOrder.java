@@ -62,6 +62,12 @@ public class PreOrder {
     @Column(nullable = false)
     private String productName;
 
+    // Snapshot of the chosen add-ons, e.g. "+ Ketchup, + Mayo". Null when none. Snapshotted
+    // (not a live link) so renaming an option later doesn't rewrite past orders. The unitPrice
+    // below already includes their per-unit surcharge.
+    @Column(length = 500)
+    private String optionsLabel;
+
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
 

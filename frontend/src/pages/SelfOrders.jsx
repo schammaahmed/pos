@@ -122,6 +122,7 @@ function OrderCard({ order, onCancel }) {
           <div className={`font-medium truncate ${cancelled ? 'line-through' : ''}`}>
             {order.quantity}× {order.productName}
           </div>
+          {order.optionsLabel && <div className="text-xs text-primary">{order.optionsLabel}</div>}
           <div className="text-xs text-gray-500 truncate">
             {done && <>abgeholt {fmtTs(order.pickedUpAt)}{order.pickedUpByName ? ` · ${order.pickedUpByName}` : ''}</>}
             {!done && cancelled && 'storniert'}

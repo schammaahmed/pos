@@ -174,7 +174,16 @@ function ProductForm({ product, categories, onClose, onSaved }) {
   // "new category" mode: the chip row is replaced by a free-text input
   const [newCategoryMode, setNewCategoryMode] = useState(false)
   const [imageUrl, setImageUrl] = useState(product?.imageUrl ?? '')
+  // add-ons: keep the existing ids so a save updates them in place rather than replacing.
+  // surcharge is edited as a string so the field can be empty while typing.
+  const [options, setOptions] = useState(
+    (product?.options ?? []).map((o) => ({ id: o.id, name: o.name, surcharge: String(o.surcharge) })),
+  )
   const [error, setError] = useState(null)
+
+  function addOption() { setOptions((os) => [...os, { id: null, name: '', surcharge: '' }]) }
+  function removeOption(i) { setOptions((os) => os.filter((_, idx) => idx !== i)) }
+  function setOption(i, patch) { setOptions((os) => os.map((o, idx) => (idx === i ? { ...o, ...patch } : o))) }
 
   async function submit(event) {
     event.preventDefault()
@@ -183,6 +192,10 @@ function ProductForm({ product, categories, onClose, onSaved }) {
       price: Number(String(price).replace(',', '.')),
       category: category || null,
       imageUrl: imageUrl || null,
+      // drop blank rows; a missing surcharge means free (0)
+      options: options
+        .filter((o) => o.name.trim())
+        .map((o) => ({ id: o.id, name: o.name.trim(), surcharge: Number(String(o.surcharge || '0').replace(',', '.')) })),
     }
     try {
       if (product) {
@@ -245,6 +258,32 @@ function ProductForm({ product, categories, onClose, onSaved }) {
         </div>
         <input placeholder="Bild-URL (optional)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="w-full border rounded-lg px-3 py-3" />
         {imageUrl && <img src={imageUrl} alt="Vorschau" className="w-20 h-20 rounded-lg object-cover" />}
+
+        {/* Extras / add-ons: name + optional per-unit surcharge (leave price empty = free) */}
+        <div className="space-y-2">
+          <span className="text-sm font-medium">Extras <span className="text-gray-400 font-normal">(optional, z.B. Ketchup)</span></span>
+          {options.map((o, i) => (
+            <div key={i} className="flex gap-2">
+              <input placeholder="Name" value={o.name} onChange={(e) => setOption(i, { name: e.target.value })}
+                     className="flex-1 border rounded-lg px-3 py-2" />
+              <div className="relative w-28">
+                <input placeholder="0,00" inputMode="decimal" value={o.surcharge}
+                       onChange={(e) => setOption(i, { surcharge: e.target.value })}
+                       className="w-full border rounded-lg pl-3 pr-6 py-2" />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
+              </div>
+              <button type="button" onClick={() => removeOption(i)}
+                      className="border rounded-lg px-2 text-gray-400 hover:text-accent hover:bg-accent-soft" title="Extra entfernen">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={addOption}
+                  className="rounded-lg px-3 py-2 text-sm border border-dashed border-gray-400 text-gray-600 w-full">
+            + Extra hinzufügen
+          </button>
+        </div>
+
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border rounded-lg py-3">Abbrechen</button>
           <button type="submit" className="flex-1 bg-primary text-white rounded-lg py-3 font-semibold">Speichern</button>

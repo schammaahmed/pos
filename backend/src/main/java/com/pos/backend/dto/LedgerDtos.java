@@ -38,7 +38,8 @@ public class LedgerDtos {
 
         public static LedgerEntry ofSale(Sale s) {
             String items = s.getItems().stream()
-                    .map(i -> i.getQuantity() + "× " + i.getProduct().getName())
+                    .map(i -> i.getQuantity() + "× " + i.getProduct().getName()
+                            + (i.getOptionsLabel() != null ? " (" + i.getOptionsLabel() + ")" : ""))
                     .collect(Collectors.joining(", "));
             boolean completed = s.getStatus() == Sale.Status.COMPLETED;
             return new LedgerEntry(

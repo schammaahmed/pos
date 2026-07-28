@@ -23,6 +23,7 @@ export default function PreOrderWalk() {
   const [participant, setParticipant] = useState(null)
   const [product, setProduct] = useState(null)
   const [quantity, setQuantity] = useState(1)
+  const [chosenOptions, setChosenOptions] = useState([]) // selected option ids for the current product
   const [showPicker, setShowPicker] = useState(false)
   const [products, setProducts] = useState([])
   const [taken, setTaken] = useState([])       // { id, participantName, productName, quantity }
@@ -33,7 +34,13 @@ export default function PreOrderWalk() {
     api('/api/products').then(setProducts).catch((e) => setError(e.message))
   }, [])
 
-  function reset() { setParticipant(null); setProduct(null); setQuantity(1) }
+  function reset() { setParticipant(null); setProduct(null); setQuantity(1); setChosenOptions([]) }
+
+  const productOptions = product?.options ?? []
+  function toggleOption(id) {
+    setChosenOptions((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))
+  }
+  const surcharge = productOptions.filter((o) => chosenOptions.includes(o.id)).reduce((s, o) => s + Number(o.surcharge), 0)
 
   // A ref, not the `busy` state: setBusy is async, so `disabled={busy}` only takes effect
   // on the next render. Two quick taps - likely on a phone, walking down a bus aisle -
@@ -47,10 +54,10 @@ export default function PreOrderWalk() {
     try {
       const created = await api('/api/preorders', {
         method: 'POST',
-        body: { participantId: participant.id, productId: product.id, quantity },
+        body: { participantId: participant.id, productId: product.id, quantity, optionIds: chosenOptions },
       })
       setTaken((prev) => [{ id: created.id, participantName: participant.firstName + ' ' + participant.lastName,
-                            productName: product.name, quantity }, ...prev])
+                            productName: product.name, optionsLabel: created.optionsLabel, quantity }, ...prev])
       reset()
     } catch (e) {
       setError(e.message)
@@ -141,7 +148,7 @@ export default function PreOrderWalk() {
               {category && <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 px-1">{category}</div>}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {list.map((p) => (
-                  <button key={p.id} onClick={() => { setProduct(p); setQuantity(1) }}
+                  <button key={p.id} onClick={() => { setProduct(p); setQuantity(1); setChosenOptions([]) }}
                           className={`rounded-xl p-3 text-left border transition ${
                             product?.id === p.id
                               ? 'bg-primary text-white border-primary'
@@ -159,6 +166,23 @@ export default function PreOrderWalk() {
         </section>
       )}
 
+      {/* Step 2b — extras for the chosen product (if it has any) */}
+      {participant && product && productOptions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {productOptions.map((o) => {
+            const on = chosenOptions.includes(o.id)
+            return (
+              <button key={o.id} onClick={() => toggleOption(o.id)}
+                      className={`text-sm rounded-full border px-3 py-1.5 ${
+                        on ? 'bg-primary text-white border-primary' : 'bg-white border-gray-300'
+                      }`}>
+                {on ? '✓ ' : '+ '}{o.name}{Number(o.surcharge) > 0 ? ` (${fmt(o.surcharge)})` : ''}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Step 3 — confirm bar (docked at bottom of the main area) */}
       {participant && product && (
         <div className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-3 sticky bottom-4">
@@ -168,7 +192,7 @@ export default function PreOrderWalk() {
             <button onClick={() => setQuantity((q) => q + 1)} className="border rounded-lg w-10 h-10 text-lg">+</button>
           </div>
           <div className="flex-1 min-w-0 text-sm truncate text-gray-500">
-            × {product.name} <span className="text-gray-300">·</span> {fmt(Number(product.price) * quantity)}
+            × {product.name} <span className="text-gray-300">·</span> {fmt((Number(product.price) + surcharge) * quantity)}
           </div>
           <button onClick={confirm} disabled={busy}
                   className="bg-primary text-white rounded-lg px-4 py-2.5 text-sm font-semibold flex items-center gap-1.5 disabled:opacity-40">
@@ -195,7 +219,7 @@ export default function PreOrderWalk() {
             {taken.map((t, i) => (
               <div key={t.id} className={`p-2.5 flex items-center gap-2 text-sm ${i === 0 ? '' : 'opacity-70'}`}>
                 <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                <span className="truncate">{t.quantity}× {t.productName} <span className="text-gray-400">·</span> {t.participantName}</span>
+                <span className="truncate">{t.quantity}× {t.productName}{t.optionsLabel ? ` (${t.optionsLabel})` : ''} <span className="text-gray-400">·</span> {t.participantName}</span>
                 {/* say it on the row, not just in the banner - the banner scrolls away */}
                 {t.undoBlocked && (
                   <span className="ml-auto shrink-0 text-[11px] text-gray-400 italic">schon in der Küche</span>
