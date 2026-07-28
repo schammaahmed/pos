@@ -1,5 +1,6 @@
 package com.pos.backend.dto;
 
+import com.pos.backend.dto.ProductDtos.OptionResponse;
 import com.pos.backend.entity.PreOrder;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 // All DTOs for the self-serve / staff PreOrder flows, grouped for tidiness.
 public class PreOrderDtos {
@@ -63,13 +65,15 @@ public class PreOrderDtos {
     ) {}
 
     /** A product the participant can pre-order (thin view; no admin-only fields). */
-    public record SelfProduct(Long id, String name, BigDecimal price, String category) {}
+    public record SelfProduct(Long id, String name, BigDecimal price, String category,
+                              List<OptionResponse> options) {}
 
     public record PlaceOrderRequest(
             @NotNull Long productId,
             @Min(1) int quantity,
             LocalDateTime requestedFor,   // optional: "for later today"
-            @Size(max = 300) String note  // optional: "ohne Zwiebel"
+            @Size(max = 300) String note, // optional: "ohne Zwiebel"
+            List<Long> optionIds          // chosen add-ons (must belong to the product)
     ) {}
 
     // Staff-issued variant: a seller walks the bus, takes orders on the participants'
@@ -80,7 +84,8 @@ public class PreOrderDtos {
             @NotNull Long productId,
             @Min(1) int quantity,
             LocalDateTime requestedFor,
-            @Size(max = 300) String note
+            @Size(max = 300) String note,
+            List<Long> optionIds
     ) {}
 
     // -------------------- Shared (participant + staff) ---------------------
@@ -90,7 +95,8 @@ public class PreOrderDtos {
             Long id,
             Long productId,
             String productName,
-            BigDecimal unitPrice,
+            String optionsLabel,          // "+ Ketchup, + Mayo"; null when no add-ons chosen
+            BigDecimal unitPrice,          // includes any per-unit surcharge (snapshot)
             int quantity,
             BigDecimal totalAmount,
             LocalDateTime requestedFor,
@@ -116,6 +122,7 @@ public class PreOrderDtos {
                     o.getId(),
                     o.getProduct() != null ? o.getProduct().getId() : null,
                     o.getProductName(),
+                    o.getOptionsLabel(),
                     o.getUnitPrice(),
                     o.getQuantity(),
                     o.totalAmount(),

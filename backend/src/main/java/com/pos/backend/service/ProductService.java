@@ -1,11 +1,13 @@
 package com.pos.backend.service;
 
+import com.pos.backend.dto.ProductDtos.OptionRequest;
 import com.pos.backend.dto.ProductDtos.ProductRequest;
 import com.pos.backend.dto.ProductDtos.ProductResponse;
 import com.pos.backend.entity.AuditLog.Action;
 import com.pos.backend.entity.AuditLog.EntityType;
 import com.pos.backend.entity.Camp;
 import com.pos.backend.entity.Product;
+import com.pos.backend.entity.ProductOption;
 import com.pos.backend.entity.User;
 import com.pos.backend.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
@@ -56,7 +58,8 @@ public class ProductService {
                 .add("Name", p.getName(), request.name() == null ? null : request.name().trim())
                 .money("Preis", p.getPrice(), request.price())
                 .add("Kategorie", p.getCategory(), request.category())
-                .add("Bild", p.getImageUrl(), request.imageUrl());
+                .add("Bild", p.getImageUrl(), request.imageUrl())
+                .add("Extras", optionSummary(p.getOptions()), optionSummary(request.options()));
 
         applyRequest(p, request);
         Product saved = productRepository.save(p);
@@ -83,6 +86,49 @@ public class ProductService {
         p.setPrice(request.price());
         p.setCategory(request.category());
         p.setImageUrl(request.imageUrl());
+        syncOptions(p, request.options());
+    }
+
+    // Reconcile the product's option list with the one in the request. Existing options
+    // (matched by id) are updated in place so their id survives - orders snapshot the label,
+    // but keeping ids stable avoids churn and keeps the audit diff meaningful. Missing ids
+    // are removed (orphanRemoval deletes them), new ones are appended.
+    private void syncOptions(Product p, List<OptionRequest> requested) {
+        List<OptionRequest> reqs = requested == null ? List.of() : requested;
+
+        // remove options no longer present in the request
+        var keptIds = reqs.stream().map(OptionRequest::id).filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        p.getOptions().removeIf(existing -> !keptIds.contains(existing.getId()));
+
+        int order = 0;
+        for (OptionRequest r : reqs) {
+            ProductOption target = r.id() == null ? null
+                    : p.getOptions().stream().filter(o -> r.id().equals(o.getId())).findFirst().orElse(null);
+            if (target == null) {
+                target = new ProductOption();
+                target.setProduct(p);
+                p.getOptions().add(target);
+            }
+            target.setName(r.name().trim());
+            target.setSurcharge(r.surcharge());
+            target.setSortOrder(order++);
+        }
+    }
+
+    /** "Ketchup, Mayo (+0,50 €)" style summary for the audit diff. */
+    private static String optionSummary(List<?> options) {
+        if (options == null || options.isEmpty()) return null;
+        return options.stream().map(o -> {
+            if (o instanceof ProductOption po) return label(po.getName(), po.getSurcharge());
+            OptionRequest r = (OptionRequest) o;
+            return label(r.name(), r.surcharge());
+        }).collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    private static String label(String name, java.math.BigDecimal surcharge) {
+        return surcharge != null && surcharge.signum() > 0
+                ? name + " (+" + surcharge.setScale(2, java.math.RoundingMode.HALF_UP) + " €)"
+                : name;
     }
 
     private Product loadChecked(User currentUser, Long id) {
